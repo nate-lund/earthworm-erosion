@@ -177,7 +177,7 @@ erosion <- stats.df %>%
   mutate("elevation change (cm/yr)" = slope * 365.25 / 10) %>%
   mutate("error +/- (cm/yr)" = ((slope - cf_lower) * 365.25 / 10))
 
-
+print(erosion)
 
 #' [fitting a random intercept and slope model, clustering by forest]
 
