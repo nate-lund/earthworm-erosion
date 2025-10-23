@@ -25,7 +25,12 @@ hert <- function(file) {
 #'############################### [start / prepping df] ################################
 
 # Pull in the data from box and some pre-processing.
-input <- read_excel(hert("working_measurements-data.xlsx"), sheet = "2025_4R")
+input.a <- read_excel(hert("working_measurements-data.xlsx"), sheet = "2025_ARB-LR") # ARB and LR data
+
+input.b <- read_excel(hert("working_measurements-data.xlsx"), sheet = "2025_Par-Sci") # Par Sci data
+
+input <- merge(input.a, input.b, all = TRUE) # merge datasets
+
 
 # preview
 head(input)
@@ -36,7 +41,7 @@ input$mm_bl <- (input$mm1_bl + input$mm2_bl) / 2 # for baseline
 
 # convert date to days past
 input$date <- as.Date(input$date) # format date column
-input$dayof <- as.numeric(input$date) - 20283 + 195 # convert to days since 1970-01-01
+input$dayof <- as.numeric(input$date) - 20283 + 195 # convert to days since 1970-01-01, subtract number of days until 2025-01-01
 
 # create and index column, a unique ID for each mm
 input$index <- as.numeric(factor((paste(input$site, input$forest, input$transect, input$slope_pos, input$pin_ID, sep = "_"))))
@@ -53,13 +58,13 @@ input <- input %>%
   mutate(dmm = 0) # add a dmm column for later
 
 # write to an excel file to be used later
-write_xlsx(input, hert("input.xlsx"))
+write_xlsx(input, hert("_analysis/input.xlsx"))
 
 head(input)
 
 #'############################### [differencing pins] ################################
 
-# number of unique pins, should be 216
+# number of unique pins
 nindex <- length(unique(input$index))
 
 # create a list, where each item is a data frame with all the measurements of each pin 
@@ -73,6 +78,7 @@ for(i in 1:nindex){ # out for loop selects each data frame (individual pin) in t
     input_list[[i]][j,13] <- input_list[[i]][j, 2] - input_list[[i]][j - 1, 2] # subtracts today's day of from last measurement's
     input_list[[i]][j,14] <- input_list[[i]][j - 1, 12] - input_list[[i]][j, 11] # subtracts today's mm from last baseline
   }
+  input_list[[i]] <- input_list[[i]] %>% drop_na(dt)
 }
 
 # create a cumulative sum for each pin, mm (baseline 0)
@@ -80,58 +86,69 @@ for (i in 1:nindex){
   input_list[[i]]$mm <- cumsum(input_list[[i]]$dmm)
 }
 
-
 #  rebuild the data frame
 output <- input_list[[1]] # jank start to the for loop, needs a base
-for(i in 2:nindex) { # for loop to stack dataframes one list at a time
+nlist <- length(input_list)
+
+for(i in 2:nlist) { # for loop to stack dataframes one list at a time
   output <- merge(output, input_list[[i]], all = TRUE)
 } 
 
 # write to an excel file
-write_xlsx(output, hert("output.xlsx"))
+write_xlsx(output, hert("_analysis/output.xlsx"))
 
 
 #'############################### [QAQC] ################################
 
-# clean up data and remove initial mms
-output <- output %>%
+# clean up data
+output.qc <- output %>%
   mutate(dmdt = ifelse(dt == 0, 0, dmm / dt)) %>% # create an erosion rate column (mm/day)
   mutate(abs = abs(dmdt)) # create abs_dmm column 
 
 # arrange the data by forest for later plotting
-output$forest <- factor(output$forest, 
-                        levels=c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ"))
+output.qc$forest <- factor(output$forest, 
+                        levels=c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ",
+                                 "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")) # need to give it forests here
 
-hist(output$dmdt, breaks = 30)
+hist(output.qc$dmdt, breaks = 30)
 
-head(output)
+head(output.qc)
 
 #'############################### [stats - forests] ################################
 
 #' [plotting pin elevation (mm, in mm) over time by forest] 
 
 # create a forest_date column
-forest.t <- output %>%
+forest.t <- output.qc %>%
   mutate(forest_date = interaction(forest, date, sep = "_"))
 
 # create scatter plot showing mm over time 
-ggplot(data = forest.t, mapping = aes(x = date, y = mm, color = forest)) +
-  geom_jitter(aes(shape = slope_pos)) +
+ggplot(data = forest.t, mapping = aes(x = date, y = mm, color = forest, shape = slope_pos)) +
+  geom_jitter() +
   facet_wrap(~forest) +
   geom_smooth(method = "lm", se = TRUE, color = "black")
-  
+
+
 # create a box plot showing mm over time with all forests 
 ggplot(forest.t, aes(x = forest_date, y = mm, fill = forest)) +
   geom_boxplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
-#' [fitting lms to get the erosion rates WITH standard errors for each forest] 
+#' [fitting lms for each forest and slope pos]
+
+lm.ash <- lm(data = forest.t %>% filter(forest == "ASH"), mm ~ dayof * slope_pos)
+
+summary(lm.ash)
+
+
+#' [fitting lms to get the erosion rates WITH standard errors for each forest NOT distinguising between FS and BS] 
 
 # note: all the dates have the same sample size, n, and should have the same variance. however, I think fitting a lm to get slope (erosion rate) and then doing more analysis later is important.
 
 # prep values
-forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ") # list of all forests
+forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ",
+             "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH") # list of all forests
 place.h = rep(NA, times = length(forests))
 
 # create a df to hold summary coef
@@ -142,7 +159,7 @@ stats.df <- data.frame("forest" = forests,
                        "p-value" = c(place.h),
                        "cf_lower" = c(place.h),
                        "cf_upper" = c(place.h),
-                       "worms" = c("EW", "EW", "EW", "JW", "JW", "JW"))
+                       "worms" = c("EW", "EW", "EW", "JW", "JW", "JW", "EW", "EW", "EW", "EW", "JW", "JW", "JW"))
 
 # for loop to run lm and store summary statistics in the df made above
 for(i in 1:length(forests)){
