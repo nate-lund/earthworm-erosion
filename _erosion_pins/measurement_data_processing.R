@@ -75,10 +75,10 @@ for(i in 1:nindex) {
 
 for(i in 1:nindex){ # out for loop selects each data frame (individual pin) in the list
   for(j in 2:6) { # inner for loop goes through each row of list [row, column]
-    input_list[[i]][j,13] <- input_list[[i]][j, 2] - input_list[[i]][j - 1, 2] # subtracts today's day of from last measurement's
-    input_list[[i]][j,14] <- input_list[[i]][j - 1, 12] - input_list[[i]][j, 11] # subtracts today's mm from last baseline
+    input_list[[i]][j,13] <- input_list[[i]][j, 2] - input_list[[i]][j - 1, 2] # subtracts today's day of from last measurement's, dt
+    input_list[[i]][j,14] <- input_list[[i]][j - 1, 12] - input_list[[i]][j, 11] # subtracts today's mm from last baseline, dmm
   }
-  input_list[[i]] <- input_list[[i]] %>% drop_na(dt)
+  input_list[[i]] <- input_list[[i]] %>% drop_na(dt) # remove rows with NA in dt column
 }
 
 # create a cumulative sum for each pin, mm (baseline 0)
@@ -110,7 +110,7 @@ output.qc$forest <- factor(output$forest,
                         levels=c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ",
                                  "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")) # need to give it forests here
 
-hist(output.qc$dmdt, breaks = 30)
+hist(output.qc$dmm, breaks = 30)
 
 head(output.qc)
 
@@ -122,11 +122,22 @@ head(output.qc)
 forest.t <- output.qc %>%
   mutate(forest_date = interaction(forest, date, sep = "_"))
 
-# create scatter plot showing mm over time 
+
+# create scatter plots showing mm over time
 ggplot(data = forest.t, mapping = aes(x = date, y = mm, color = forest, shape = slope_pos)) +
   geom_jitter() +
   facet_wrap(~forest) +
-  geom_smooth(method = "lm", se = TRUE, color = "black")
+  geom_smooth(method = "lm", se = TRUE, color = "black") # for all sites
+
+ggplot(data = filter(forest.t, site == "ARB" | site == "LR"), mapping = aes(x = date, y = mm, color = forest, linetype = slope_pos, shape = slope_pos)) +
+  geom_jitter() +
+  facet_wrap(~forest) +
+  geom_smooth(method = "lm", se = TRUE, color = "black") # for LR-ARB
+
+ggplot(data = filter(forest.t, site == "Par-Sci"), mapping = aes(x = date, y = mm, color = forest, linetype = slope_pos, shape = slope_pos)) +
+  geom_jitter() +
+  facet_wrap(~forest) +
+  geom_smooth(method = "lm", se = TRUE, color = "black") # for Par-Sci
 
 
 # create a box plot showing mm over time with all forests 
@@ -137,24 +148,15 @@ ggplot(forest.t, aes(x = forest_date, y = mm, fill = forest)) +
 
 #' [fitting lms for each forest and slope pos]
 
-lm.ash <- lm(data = forest.t %>% filter(forest == "ASH"), mm ~ dayof * slope_pos)
-
-summary(lm.ash)
-
-
-#' [fitting lms to get the erosion rates WITH standard errors for each forest NOT distinguising between FS and BS] 
-
-# note: all the dates have the same sample size, n, and should have the same variance. however, I think fitting a lm to get slope (erosion rate) and then doing more analysis later is important.
-
 # prep values
 forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ",
              "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH") # list of all forests
-place.h = rep(NA, times = length(forests))
+place.h = 2 * rep(NA, times = length(forests))
 
 # create a df to hold summary coef
-stats.df <- data.frame("forest" = forests,
+stats.df <- data.frame("forest" = rep(forests, each = 2),
+                       "slope_pos" = rep(c("BS", "FS"), times = length(place.h / 2)),
                        "slope" = c(place.h),
-                       "intercept" = c(place.h),
                        "SE" = c(place.h),
                        "p-value" = c(place.h),
                        "cf_lower" = c(place.h),
@@ -162,44 +164,61 @@ stats.df <- data.frame("forest" = forests,
                        "worms" = c("EW", "EW", "EW", "JW", "JW", "JW", "EW", "EW", "EW", "EW", "JW", "JW", "JW"))
 
 # for loop to run lm and store summary statistics in the df made above
-for(i in 1:length(forests)){
-  lm.temp <- lm(data = forest.t %>% filter(forest == forests[i] ), mm ~ dayof)
-  stats.df[i, 2] = coef(lm.temp)[2] # slope
-  stats.df[i, 3] = coef(lm.temp)[1] # intercept
-  stats.df[i, 4] = summary(lm.temp)$coefficients[2, 2] # SE
-  stats.df[i, 5] = summary(lm.temp)$coefficients[2, 4] #p-value
-  stats.df[i, 6] = confint(lm.temp)[2,1] # lower confint
-  stats.df[i, 7] = confint(lm.temp)[2,2] # upper confint
+for(i in c(1,3,5,7,9,11,13,15,17,19,21,23,25)){
+  lm.temp <- lm(data = forest.t %>% filter(forest == forests[(i+1)/2] ), mm ~ dayof * slope_pos)
+  stats.df[i, 3] = coef(lm.temp)[2] # BS slope
+  stats.df[i + 1, 3] = coef(lm.temp)[2] + coef(lm.temp)[4] # FS slope
+  
+  stats.df[i, 4] = summary(lm.temp)$coefficients[2, 2] # BS SE
+  stats.df[i + 1, 4] = summary(lm.temp)$coefficients[4, 2] # FS SE
+  
+  stats.df[i, 5] = summary(lm.temp)$coefficients[2, 4] # BS p-value
+  stats.df[i + 1, 5] = summary(lm.temp)$coefficients[4, 4] # FS p-value
+  
+  stats.df[i, 6] = confint(lm.temp)[2,1] # BS lower confint
+  stats.df[i + 1, 6] = confint(lm.temp)[4,1] # FS lower confint
+    
+  stats.df[i, 7] = confint(lm.temp)[2,2] # BS upper confint
+  stats.df[i + 1, 7] = confint(lm.temp)[4,2] # FS upper confint
 }
 
-print(stats.df)
-
-#check assumptions, they look okay
-check_model(lm.temp, check = c("linearity", "homogeneity", "qq", "normality"))
-
-#' plot estimates to look for broader trends [WIP, come back to this w/ more sites]
-ggplot(data = stats.df, mapping = aes(x = worms, y = slope)) +
-  geom_point(aes(color = forest)) +
-  geom_smooth(method = "lm", formula = slope ~ worms, color = "black")
-
-?geom_smooth
-
-# don't really care about the intercept, since should be 0
-ggplot(data = stats.df, mapping = aes(x = worms, y = intercept)) +
-  geom_point()
-
+type(stats.df)
 
 # compute erosion values in cm/yr
 erosion <- stats.df %>%
   mutate("elevation change (cm/yr)" = slope * 365.25 / 10) %>%
-  mutate("error +/- (cm/yr)" = ((slope - cf_lower) * 365.25 / 10))
+  mutate("error +/- (cm/yr)" = ((slope - cf_lower) * 365.25 / 10)) %>% 
+  mutate("signifigant" = if_else(p.value > 0.049, "N", "Y")) %>% 
+  select("forest", "slope_pos", "elevation change (cm/yr)", "error +/- (cm/yr)", "p.value", "signifigant")
 
-print(erosion)
+filter(erosion, slope_pos == "BS")
+
+filter(erosion, slope_pos == "FS")
+
+
+#check assumptions, they look okay
+check_model(lm.temp, check = c("linearity", "homogeneity", "qq", "normality"))
+
+#' plot estimates to look for broader trends
+ggplot(data = stats.df, mapping = aes(x = worms, y = slope)) +
+  geom_point(aes(color = forest)) +
+  geom_smooth(method = "lm", formula = slope ~ worms, color = "black") +
+  facet_wrap(~slope_pos) # points
+
+#' plot estimates to look for broader trends
+ggplot(data = stats.df, mapping = aes(x = worms, y = slope)) +
+  geom_boxplot(aes(fill = worms)) +
+  geom_smooth(method = "lm", formula = slope ~ worms, color = "black") + 
+  facet_wrap(~slope_pos) # boxplot
+
+
+
 
 #' [fitting a random intercept and slope model, clustering by forest]
 
 lmer.fr <- lmer(data = forest.t, mm ~ dayof + (1 + dayof | forest)) 
 summary(lmer.fr)
+
 
 #' [fit contrasts to a lm to test for signifigance]
 
@@ -234,19 +253,52 @@ forest.aov <- aov(forest.lm)
 TukeyHSD(forest.aov, conf.level=.95)
 
 
-#'############################### [stats - worms] ################################
 
-# working df
-worms.a <- output
+#' #' [DISREGARDING slope_pos: fitting lms to get the erosion rates WITH standard errors for each forest] 
+#' 
+#' # note: all the dates have the same sample size, n, and should have the same variance. however, I think fitting a lm to get slope (erosion rate) and then doing more analysis later is important.
+#' 
+#' # prep values
+#' forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ",
+#'              "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH") # list of all forests
+#' place.h = rep(NA, times = length(forests))
+#' 
+#' # create a df to hold summary coef
+#' stats.df <- data.frame("forest" = forests,
+#'                        "slope" = c(place.h),
+#'                        "intercept" = c(place.h),
+#'                        "SE" = c(place.h),
+#'                        "p-value" = c(place.h),
+#'                        "cf_lower" = c(place.h),
+#'                        "cf_upper" = c(place.h),
+#'                        "worms" = c("EW", "EW", "EW", "JW", "JW", "JW", "EW", "EW", "EW", "EW", "JW", "JW", "JW"))
+#' 
+#' # for loop to run lm and store summary statistics in the df made above
+#' for(i in 1:length(forests)){
+#'   lm.temp <- lm(data = forest.t %>% filter(forest == forests[i] ), mm ~ dayof)
+#'   stats.df[i, 2] = coef(lm.temp)[2] # slope
+#'   stats.df[i, 3] = coef(lm.temp)[1] # intercept
+#'   stats.df[i, 4] = summary(lm.temp)$coefficients[2, 2] # SE
+#'   stats.df[i, 5] = summary(lm.temp)$coefficients[2, 4] #p-value
+#'   stats.df[i, 6] = confint(lm.temp)[2,1] # lower confint
+#'   stats.df[i, 7] = confint(lm.temp)[2,2] # upper confint
+#' }
+#' 
+#' print(stats.df)
 
-ggplot(data = worms.a, mapping = aes(x = worms, y = dmdt, fill = worms)) +
-  geom_boxplot()
-
-ggplot(data = worms.a, mapping = aes(x = worms, y = (dmdt / 10 * 365.25), fill = forest)) +
-  geom_boxplot()
-
-
-
+#' #'############################### [stats - worms] ################################
+#' 
+#' # working df
+#' worms.a <- output
+#' 
+#' ggplot(data = worms.a, mapping = aes(x = worms, y = dmdt, fill = worms)) +
+#'   geom_boxplot()
+#' 
+#' ggplot(data = worms.a, mapping = aes(x = worms, y = (dmdt / 10 * 365.25), fill = forest)) +
+#'   geom_boxplot()
+#' 
+#' 
+#' 
 #' #'############################### [old junk] ################################
 #' 
 #' # FOREST SPECEFIC boxplot for dhdt
