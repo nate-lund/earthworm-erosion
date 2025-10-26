@@ -27,6 +27,9 @@ hert <- function(file) {
 # Rasterfy the image
 image <- brick(x = "C:/Users/natha/Desktop/tester.jpg")
 
+# aggregate to reduce file size
+image <- aggregate(image, fact = 10, fun = mean)
+
 # Extract red, blue and green bands to unique raster files
 red <- image[[1]]
 green <- image[[2]]
@@ -35,24 +38,33 @@ blue <- image[[3]]
 # Calculate index raster
 index <- 2 * (green) - red - blue
 
+head(index)
+
 #force index raster to be read as a data frame (needed for ggplot)
 index_spdf <- as(index, "SpatialPixelsDataFrame")
 index_df <- as.data.frame(index_spdf)
 #give index_df proper column names
 colnames(index_df) <- c("value", "x", "y")
 
-#filter index for just for veg
+# look a range of index
+summary(index_veg$value)
+
+#' filter index for just for veg [i think this needs to be log transformed]
 index_veg = index_df %>%
-  filter(value > 75)
-print(nrow(index_veg) / 12000000)
+  mutate("class" = if_else(value > 0, "A", if_else(value > -1 & value < 0, "B", if_else(value < -2, "C", "D"))))
+
+# Plot the filtered index_veg
+ggplot(data = index_veg, aes(x = y, y = x, fill = class)) +
+  geom_tile()
+
+# histogram of values
+ggplot(data = index_veg, aes(value)) +
+  geom_histogram(binwidth = 5)
 
 # Plot the full index
 ggplot(data = index_df, aes(x = x, y = y, fill = value)) +
   geom_tile()
 
-# Plot the filtered index_veg
-ggplot(data = index_veg, aes(x = x, y = y, fill = value)) +
-  geom_tile()
 
 #'############################### [batching for a folder of images] ################################
 #' 
