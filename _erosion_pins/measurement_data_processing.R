@@ -31,7 +31,6 @@ input.b <- read_excel(hert("working_measurements-data.xlsx"), sheet = "2025_Par-
 
 input <- merge(input.a, input.b, all = TRUE) # merge datasets
 
-
 # preview
 head(input)
 
@@ -66,6 +65,7 @@ head(input)
 
 # number of unique pins
 nindex <- length(unique(input$index))
+length(input$index)
 
 # create a list, where each item is a data frame with all the measurements of each pin 
 input_list <- vector(mode = "list", length = nindex) # create empty list
@@ -78,7 +78,7 @@ for(i in 1:nindex){ # out for loop selects each data frame (individual pin) in t
     input_list[[i]][j,13] <- input_list[[i]][j, 2] - input_list[[i]][j - 1, 2] # subtracts today's day of from last measurement's, dt
     input_list[[i]][j,14] <- input_list[[i]][j - 1, 12] - input_list[[i]][j, 11] # subtracts today's mm from last baseline, dmm
   }
-  input_list[[i]] <- input_list[[i]] %>% drop_na(dt) # remove rows with NA in dt column
+  input_list[[i]] <- input_list[[i]] %>% drop_na(slope_pos) # remove rows with NA in dt column
 }
 
 # create a cumulative sum for each pin, mm (baseline 0)
@@ -113,6 +113,8 @@ output.qc$forest <- factor(output$forest,
 hist(output.qc$dmm, breaks = 30)
 
 head(output.qc)
+
+write_xlsx(output, hert("_analysis/output_qc.xlsx"))
 
 #'############################### [stats - forests] ################################
 
@@ -182,7 +184,18 @@ for(i in c(1,3,5,7,9,11,13,15,17,19,21,23,25)){
   stats.df[i + 1, 7] = confint(lm.temp)[4,2] # FS upper confint
 }
 
-type(stats.df)
+print(stats.df)
+
+#' [fit a LM to compare JW vs EW, across BS and FS]
+
+# for all sites
+lm.forest2 <- lm(data = stats.df, slope ~ worms + slope_pos)
+summary(lm.forest2)
+
+# for significant sites
+stats.sig <- filter(stats.df, p.value < 0.049) # filter for low p-value
+lm.forest2 <- lm(data = stats.sig, slope ~ worms + slope_pos) # fit lm for those values
+summary(lm.forest2)
 
 # compute erosion values in cm/yr
 erosion <- stats.df %>%
@@ -191,8 +204,9 @@ erosion <- stats.df %>%
   mutate("signifigant" = if_else(p.value > 0.049, "N", "Y")) %>% 
   select("forest", "slope_pos", "elevation change (cm/yr)", "error +/- (cm/yr)", "p.value", "signifigant")
 
+# visualzie erosion rates in a table
+print(erosion)
 filter(erosion, slope_pos == "BS")
-
 filter(erosion, slope_pos == "FS")
 
 
@@ -212,48 +226,55 @@ ggplot(data = stats.df, mapping = aes(x = worms, y = slope)) +
   facet_wrap(~slope_pos) # boxplot
 
 
-
+#'############################### [stats - MLM forests] ################################
 
 #' [fitting a random intercept and slope model, clustering by forest]
 
+forest.bs <- filter(forest.t, slope_pos == "BS") # filter for BS data
+
+# random intercept only
 lmer.fr <- lmer(data = forest.t, mm ~ dayof + (1 + dayof | forest)) 
 summary(lmer.fr)
 
+confint(lmer.fr, oldNames = FALSE)
 
-#' [fit contrasts to a lm to test for signifigance]
-
-# fit lm
-lm.forest <- lm(data = forest.t, mm ~ dayof + forest)
-
-# manual matrix multiplication for contrasts between ASH and LRE - for verification
-cmat <- c(0, 1, -1, 0, 0, 0, 0)
-cmat%*%coef(lm.forest) # estimate of ASH - LRE
-Sigma_b <- vcov(lm.forest) 
-(SEcontrast <- sqrt(t(cmat)%*%Sigma_b%*%(cmat))) # se = sqrt(variance)
-
-# easy way, get contrasts between all forests accounting for dayof
-pairs(emmeans(lm.forest, "forest"), adjust = "none")
-
-# fit lm
-lm.worms <- lm(data = forest.t, mm ~ dayof + forest + worms)
-summary(lm.worms)
+ranef(lmer.fr)
 
 
-
-#' [perform ANOVA and Tukey's test to find sig, between forests] 
-
-# fit lm
-forest.lm <- lm(data = forest.t, mm ~ dayof + forest)
-summary(forest.lm)
-
-# fit ANOVA
-forest.aov <- aov(forest.lm)
-
-# Tukey's test, show no signifigance
-TukeyHSD(forest.aov, conf.level=.95)
-
-
-
+#' #' [fit contrasts to a lm to test for signifigance]
+#' 
+#' # fit lm
+#' lm.forest <- lm(data = forest.t, mm ~ dayof + forest)
+#' 
+#' # manual matrix multiplication for contrasts between ASH and LRE - for verification
+#' cmat <- c(0, 1, -1, 0, 0, 0, 0)
+#' cmat%*%coef(lm.forest) # estimate of ASH - LRE
+#' Sigma_b <- vcov(lm.forest) 
+#' (SEcontrast <- sqrt(t(cmat)%*%Sigma_b%*%(cmat))) # se = sqrt(variance)
+#' 
+#' # easy way, get contrasts between all forests accounting for dayof
+#' pairs(emmeans(lm.forest, "forest"), adjust = "none")
+#' 
+#' # fit lm
+#' lm.worms <- lm(data = forest.t, mm ~ dayof + forest + worms)
+#' summary(lm.worms)
+#' 
+#' 
+#' 
+#' #' [perform ANOVA and Tukey's test to find sig, between forests] 
+#' 
+#' # fit lm
+#' forest.lm <- lm(data = forest.t, mm ~ dayof + forest)
+#' summary(forest.lm)
+#' 
+#' # fit ANOVA
+#' forest.aov <- aov(forest.lm)
+#' 
+#' # Tukey's test, show no signifigance
+#' TukeyHSD(forest.aov, conf.level=.95)
+#' 
+#' 
+#' 
 #' #' [DISREGARDING slope_pos: fitting lms to get the erosion rates WITH standard errors for each forest] 
 #' 
 #' # note: all the dates have the same sample size, n, and should have the same variance. however, I think fitting a lm to get slope (erosion rate) and then doing more analysis later is important.
