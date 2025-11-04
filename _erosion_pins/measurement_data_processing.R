@@ -1,7 +1,7 @@
 #'############################### [setup] ################################
 
 # libraries needed
-libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans")
+libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -116,14 +116,68 @@ head(output.qc)
 
 write_xlsx(output, hert("_analysis/output_qc.xlsx"))
 
+
+#'############################### [stats - pins] ################################
+
+#' The goal here is to dig  into pin-specific and measurement to measurement trends. Here we plot the pins as lines, show the boxplots of thoses measurements, and fit a cubic spline. Below is a linear spline (which I think is more realistic since erosion is largely storm based). 
+
+#' I would like to do plotting based on cumulative precipitation (thinking between each time period), see if there is a relationship between percip and slope [WIP]. How much does precip impact the elevation of the forest as a whole versus pin specific. 
+
+#' Could I also look at pins that experience only deposition? only erosion?
+
+# create a line plot with a line for each individual pin
+pin.t <- output.qc %>% mutate(pin = (paste(forest, transect, slope_pos, pin_ID, sep = "_"))) %>% # make a unique column for each pin 
+  mutate(forest_date = interaction(forest, date, sep = "_")) %>%  # make a column for each forest at each date, for boxplot
+  filter(site == "ARB" | site == "LR") # for now, filter only arb and LR data
+
+ggplot(data = pin.t, mapping = aes(x = date, y = mm)) +
+  geom_line(aes(group = pin, color = slope_pos)) +
+  geom_boxplot(aes(group = forest_date, fill = forest)) +
+  stat_smooth(method = "lm", formula = y ~ bs(x, degree = 5), se = FALSE, color = "black") +
+  facet_wrap(~forest, scales = "free_y") +
+  theme(legend.position = "none") + # this is needed
+  geom_hline(yintercept = 0)  # for LR-ARB
+
+#' [fitting linear splines]
+
+head(pin.t)
+
+# split our master df (pin.t) into different data frames in a list by forest, as these all had measurements taken on the same date (for knots)
+
+forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ")
+nforests <- length(forests)
+
+pin.list <- vector(mode = "list", length = nforests) # create empty list
+for(i in 1:nforests) {
+  pin.list[[i]] <- pin.t %>% filter(forest == forests[i])
+}
+
+# fit lsplines and generated predicted values
+for (i in 1:nforests){
+  dates <- unique(pin.list[[i]]$dayof)[2:5] # knots at here, excludes first date
+  pin.lspline <- lm(data = pin.list[[i]], mm ~ lspline(dayof, knots = dates)) # fit lspline
+  pin.list[[i]]$lspline <- predict(pin.lspline) # create predictions
+  print(summary(pin.lspline))
+  ifelse(i == 1, pin.p <- pin.list[[i]], pin.p <- merge(pin.p, pin.list[[i]], all = TRUE))
+}
+
+
+# plot
+ggplot(data = pin.p, mapping = aes(x = date, y = mm)) +
+  geom_line(aes(group = pin, color = slope_pos)) +
+  geom_boxplot(aes(group = forest_date, fill = forest)) +
+  geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1) +
+  facet_wrap(~forest, scales = "free_y") +
+  theme(legend.position = "none") + # this is needed
+  geom_hline(yintercept = 0)  # for LR-ARB
+
+
 #'############################### [stats - forests] ################################
 
 #' [plotting pin elevation (mm, in mm) over time by forest] 
 
-# create a forest_date column
-forest.t <- output.qc %>%
-  mutate(forest_date = interaction(forest, date, sep = "_"))
-
+# create a draft dataset
+forest.t <- output.qc 
 
 # create scatter plots showing mm over time
 ggplot(data = forest.t, mapping = aes(x = date, y = mm, color = forest, shape = slope_pos)) +
@@ -143,7 +197,9 @@ ggplot(data = filter(forest.t, site == "Par-Sci"), mapping = aes(x = date, y = m
 
 
 # create a box plot showing mm over time with all forests 
-ggplot(forest.t, aes(x = forest_date, y = mm, fill = forest)) +
+forest.date.t <- forest.t %>% mutate(forest_date = interaction(forest, date, sep = "_")) # make a column for each forest at each date
+
+ggplot(forest.date.t, aes(x = forest_date, y = mm, fill = forest)) +
   geom_boxplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
@@ -226,21 +282,21 @@ ggplot(data = stats.df, mapping = aes(x = worms, y = slope)) +
   facet_wrap(~slope_pos) # boxplot
 
 
-#'############################### [stats - MLM forests] ################################
-
-#' [fitting a random intercept and slope model, clustering by forest]
-
-forest.bs <- filter(forest.t, slope_pos == "BS") # filter for BS data
-
-# random intercept only
-lmer.fr <- lmer(data = forest.t, mm ~ dayof + (1 + dayof | forest)) 
-summary(lmer.fr)
-
-confint(lmer.fr, oldNames = FALSE)
-
-ranef(lmer.fr)
-
-
+#' #'############################### [stats - MLM forests] ################################
+#' 
+#' #' [fitting a random intercept and slope model, clustering by forest]
+#' 
+#' forest.bs <- filter(forest.t, slope_pos == "BS") # filter for BS data
+#' 
+#' # random intercept only
+#' lmer.fr <- lmer(data = forest.t, mm ~ dayof + (1 + dayof | forest)) 
+#' summary(lmer.fr)
+#' 
+#' confint(lmer.fr, oldNames = FALSE)
+#' 
+#' ranef(lmer.fr)
+#' 
+#' 
 #' #' [fit contrasts to a lm to test for signifigance]
 #' 
 #' # fit lm

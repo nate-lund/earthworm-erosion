@@ -48,7 +48,6 @@ head(df.1)
 # calculate slope at each point
 df.1$slope <- diff(df.1$Elevation)
 
-
 # stack dfs
 profiles.a <- bind_rows(df.1, df.2, df.3, df.4, df.5, df.6, .id = "source")
 
