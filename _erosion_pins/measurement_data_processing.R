@@ -31,9 +31,6 @@ input.b <- read_excel(hert("working_measurements-data.xlsx"), sheet = "2025_Par-
 
 input <- merge(input.a, input.b, all = TRUE) # merge datasets
 
-# preview
-head(input)
-
 # we need to first average the duplicate measurements for each pin.
 input$mm_ch <- (input$mm1_ch + input$mm2_ch) / 2 # for changes
 input$mm_bl <- (input$mm1_bl + input$mm2_bl) / 2 # for baseline
@@ -59,8 +56,6 @@ input <- input %>%
 # write to an excel file to be used later
 write_xlsx(input, hert("_analysis/input.xlsx"))
 
-head(input)
-
 #'############################### [differencing pins] ################################
 
 # number of unique pins
@@ -78,12 +73,13 @@ for(i in 1:nindex){ # out for loop selects each data frame (individual pin) in t
     input_list[[i]][j,13] <- input_list[[i]][j, 2] - input_list[[i]][j - 1, 2] # subtracts today's day of from last measurement's, dt
     input_list[[i]][j,14] <- input_list[[i]][j - 1, 12] - input_list[[i]][j, 11] # subtracts today's mm from last baseline, dmm
   }
-  input_list[[i]] <- input_list[[i]] %>% drop_na(slope_pos) # remove rows with NA in dt column
+  input_list[[i]] <- input_list[[i]] %>% drop_na(slope_pos) # remove rows with NA's (in slope_pos column)
 }
 
 # create a cumulative sum for each pin, mm (baseline 0)
 for (i in 1:nindex){
   input_list[[i]]$mm <- cumsum(input_list[[i]]$dmm)
+  input_list[[i]]$amm <- cumsum(abs(input_list[[i]]$dmm))
 }
 
 #  rebuild the data frame
@@ -110,9 +106,6 @@ output.qc$forest <- factor(output$forest,
                         levels=c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ",
                                  "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")) # need to give it forests here
 
-hist(output.qc$dmm, breaks = 30)
-
-head(output.qc)
 
 write_xlsx(output, hert("_analysis/output_qc.xlsx"))
 
@@ -121,58 +114,194 @@ write_xlsx(output, hert("_analysis/output_qc.xlsx"))
 
 #' The goal here is to dig  into pin-specific and measurement to measurement trends. Here we plot the pins as lines, show the boxplots of thoses measurements, and fit a cubic spline. Below is a linear spline (which I think is more realistic since erosion is largely storm based). 
 
-#' I would like to do plotting based on cumulative precipitation (thinking between each time period), see if there is a relationship between percip and slope [WIP]. How much does precip impact the elevation of the forest as a whole versus pin specific. 
+#' I would like to plot based on cumulative precipitation (thinking between each time period), see if there is a relationship between percip and slope [WIP].
+  #' How much does precip impact the elevation of the forest as a whole versus pin specific.
+  #' Is there a tighter relationship between erosion and precipitation in EW vs JW? Across all sites?
 
 #' Could I also look at pins that experience only deposition? only erosion?
 
-# create a line plot with a line for each individual pin
-pin.t <- output.qc %>% mutate(pin = (paste(forest, transect, slope_pos, pin_ID, sep = "_"))) %>% # make a unique column for each pin 
-  mutate(forest_date = interaction(forest, date, sep = "_")) %>%  # make a column for each forest at each date, for boxplot
-  filter(site == "ARB" | site == "LR") # for now, filter only arb and LR data
+#' also consider doing abs splines / analysis
 
-ggplot(data = pin.t, mapping = aes(x = date, y = mm)) +
-  geom_line(aes(group = pin, color = slope_pos)) +
-  geom_boxplot(aes(group = forest_date, fill = forest)) +
-  stat_smooth(method = "lm", formula = y ~ bs(x, degree = 5), se = FALSE, color = "black") +
-  facet_wrap(~forest, scales = "free_y") +
-  theme(legend.position = "none") + # this is needed
-  geom_hline(yintercept = 0)  # for LR-ARB
+#' what if, I calcualted the erosion rate for every pin (easy), then I compared that to cumulate precip at that point. then, I do a scatter plot with precip on the x-axis and erosion on the y-axis. then fit a lm to the JW and to the EW data.
 
-#' [fitting linear splines]
+# create some needed columns and sort / remove uneeded ones
+pin.p <- output.qc %>% 
+  mutate(pin = (paste(forest, transect, slope_pos, pin_ID, sep = "_"))) %>% # unique id for each pin
+  mutate(forest_date = interaction(forest, date, sep = "_")) %>% # combines  forest at each date
+  select(date, dayof, site, forest, transect, slope_pos, pin_ID, mm, amm, worms, id, pin, forest_date, dmm, dmdt)
 
-head(pin.t)
+
+# prep values
+forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ",
+                                   "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")
+nforests <- length(forests)
+
+
+#'############################### [calculating cumulative precipitation] ################################
+
+head(as_tibble(pin.p))
+
+# pull precip data from box
+
+# ARB
+input.ARB <- read.csv(hert("_precip/ARB_PRISM_July1-Oct1.csv"), skip = 10)
+precip.ARB <- input.ARB %>%
+  mutate(date = as.Date(Date), .keep = "unused") %>% 
+  rename(precip = ppt..mm., mtemp = tmean..degrees.C.) %>% 
+  mutate(cum.precip = cumsum(precip))
+
+# LR
+input.LR <- read.csv(hert("_precip/LR_PRISM_July1-Oct1.csv"), skip = 10)
+precip.LR <- input.LR %>%
+  mutate(date = as.Date(Date), .keep = "unused") %>% 
+  rename(precip = ppt..mm., mtemp = tmean..degrees.C.) %>% 
+  mutate(cum.precip = cumsum(precip))
+
+# PAR SCI untill I get the rest of the precip data, it is using arb for now
+
+precip.ParSci <- input.ARB %>%
+  mutate(date = as.Date(Date), .keep = "unused") %>% 
+  rename(precip = ppt..mm., mtemp = tmean..degrees.C.) %>% 
+  mutate(cum.precip = cumsum(precip))
+
+
+# need to split dataframe for calucations, etc
+pin.forests <- vector(mode = "list", length = nforests) # create empty list, nforests defined above
+
+# for loop for calcualtions
+for(i in 1:nforests) { 
+  pin.forests[[i]] <- pin.p %>% filter(forest == forests[i]) # split dataframe into list
+  site.t <- pin.forests[[i]][1,3] # extract site from forest df
+  precip.t <- get(paste("precip.", site.t, sep = "")) # pulls correct precip data 
+  dates.t <- unique(pin.forests[[i]][1]) # gets unique dates
+  
+  precip.t <- precip.t %>%
+    filter(date >= dates.t[1,1] & date <= dates.t[6,1]) %>% # cut off data before and after mms
+    select(date, cum.precip)
+  
+  pin.forests[[i]] <- merge(pin.forests[[i]], precip.t, by = "date", all = FALSE) # merge precip and pins datasets based on date
+  
+  ifelse(i == 1, pin.p2 <- pin.forests[[i]], pin.p2 <- merge(pin.p2, pin.forests[[i]], all = TRUE)) # merge data frames
+}
+
+head(pin.p2)
+
+
+#'############################### [fitting linear splines, elevation / date] ################################
 
 # split our master df (pin.t) into different data frames in a list by forest, as these all had measurements taken on the same date (for knots)
 
-forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ")
-nforests <- length(forests)
-
 pin.list <- vector(mode = "list", length = nforests) # create empty list
-for(i in 1:nforests) {
-  pin.list[[i]] <- pin.t %>% filter(forest == forests[i])
+
+for(i in 1:nforests) { # for loop to split
+  pin.list[[i]] <- pin.p2 %>% filter(forest == forests[i])
 }
+
+# create list to hold model summaries
+coefs.list <- data.frame(forest = as.vector(forests),
+                         intercept = rep(NA, times = nforests),
+                         slope1 = rep(NA, times = nforests),
+                         slope2 = rep(NA, times = nforests),
+                         slope3 = rep(NA, times = nforests),
+                         slope4 = rep(NA, times = nforests),
+                         slope5 = rep(NA, times = nforests)) 
+
 
 # fit lsplines and generated predicted values
 for (i in 1:nforests){
-  dates <- unique(pin.list[[i]]$dayof)[2:5] # knots at here, excludes first date
+  print(i)
+  dates <- unique(pin.list[[i]]$dayof)[2:(length(unique(pin.list[[i]]$dayof))-1)] # knots at here, excludes first date
   pin.lspline <- lm(data = pin.list[[i]], mm ~ lspline(dayof, knots = dates)) # fit lspline
   pin.list[[i]]$lspline <- predict(pin.lspline) # create predictions
-  print(summary(pin.lspline))
-  ifelse(i == 1, pin.p <- pin.list[[i]], pin.p <- merge(pin.p, pin.list[[i]], all = TRUE))
+  coefs.t <- coefficients(pin.lspline)
+  coefs.list[i,2:7] <- c(coefs.t, rep(NA, ncol(coefs.list) - length(coefs.t)))  # store model summary
+  ifelse(i == 1,pin.ls <- pin.list[[i]], pin.ls <- merge(pin.ls, pin.list[[i]], all = TRUE)) # merge data frames
 }
 
+head(as_tibble(pin.ls))
 
-# plot
-ggplot(data = pin.p, mapping = aes(x = date, y = mm)) +
+write_xlsx(pin.ls, hert("_analysis/linearspline_pins.xlsx"))
+
+write_xlsx(coefs.list, hert("_analysis/lsp_coefs.xlsx"))
+
+#'############################### [summary stats for lsplines] ################################
+
+# pivot coef list
+coefs.longer <- coefs.list %>% 
+  pivot_longer(
+    cols = starts_with("slope"),
+    names_to = "slope_id",
+    values_to = "slope")
+
+# calculate average erosion 
+coefs.sum <- coefs.longer %>% 
+  group_by(forest) %>% 
+  summarise(ave_slope = mean(slope, na.rm = TRUE)) %>% 
+  mutate("erosion (cm/yr)" = ave_slope * 365 / 10)
+
+ggplot(data = coefs.longer, mapping = aes(y = slope, x = slope_id, color = forest)) +
+  geom_point()
+
+
+
+
+ggplot(data = pin.p2, mapping = aes(y = dmdt, x = cum.precip, color = worms, linetype = worms)) +
+  geom_jitter() +
+  geom_smooth(method = "lm", se = TRUE, color = "black")
+
+#'############################### [plotting pins and lsplines] ################################
+
+#' [cumulative precip plots]
+
+ggplot(data = pin.p2, mapping = aes(x = cum.precip, y = mm)) +
+  geom_line(aes(group = pin, color = slope_pos)) +
+  geom_boxplot(aes(group = forest_date, fill = forest)) +
+  facet_wrap(~forest, scale = "free_x") +
+  scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
+  geom_hline(yintercept = 0) # all sites
+
+
+#' [date plots]
+
+# ploting lines, splines, and boxplots
+ggplot(data = pin.ls, mapping = aes(x = date, y = mm)) +
   geom_line(aes(group = pin, color = slope_pos)) +
   geom_boxplot(aes(group = forest_date, fill = forest)) +
   geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1) +
-  facet_wrap(~forest, scales = "free_y") +
-  theme(legend.position = "none") + # this is needed
-  geom_hline(yintercept = 0)  # for LR-ARB
+  facet_wrap(~forest, scale = "free_x") +
+  scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
+  geom_hline(yintercept = 0) # all sites
+
+ggplot(data = filter(pin.ls, site == "ARB" | site == "LR"), mapping = aes(x = date, y = mm)) +
+  geom_line(aes(group = pin, color = slope_pos)) +
+  geom_boxplot(aes(group = forest_date, fill = forest)) +
+  geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1) +
+  facet_wrap(~forest) +
+  scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
+  geom_hline(yintercept = 0) # LR and ARB
+
+ggplot(data = filter(pin.ls, site == "Par-Sci"), mapping = aes(x = date, y = mm)) +
+  geom_line(aes(group = pin, color = slope_pos)) +
+  geom_boxplot(aes(group = forest_date, fill = forest)) +
+  geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1) +
+  facet_wrap(~forest, scale = "free_x") +
+  scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
+  geom_hline(yintercept = 0) # Par-Sci
 
 
-#'############################### [stats - forests] ################################
+
+
+
+
+
+
+
+
+
+
+
+
+#'############################### [stats - forests OLD] ################################
 
 #' [plotting pin elevation (mm, in mm) over time by forest] 
 
