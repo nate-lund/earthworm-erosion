@@ -1,5 +1,11 @@
-#'############################### [setup] ################################
+---
+title: "RUSLE2_TopoSec"
+author: "Nate Lund"
+date: "2025-11-13"
+output: html_document
+---
 
+```{r setup, include=FALSE}
 # libraries needed
 libs <- c("ggplot2", "dplyr", "tidyr", "writexl", "cowplot", "gridGraphics")
 
@@ -21,8 +27,14 @@ hert <- function(file) {
   file_path = paste(data_folder, file, sep = "")
   return(file_path)
 }
+```
 
-#'############################### [prepping profiles] ################################
+## RUSEL2 Toposec
+
+This is an R Markdown document designed to...
+
+
+```{r loading_datasets}
 
 # load dfs. all datasets are distinct objects but are also in the list
 df.list <- list(
@@ -37,22 +49,31 @@ df.list <- list(
 # calculate slope, curvature at each point
 df.list <- lapply(df.list, function(df) {
   df$elevation <- df$Elevation - min(df$Elevation) # calculate an elevation value starting at 0
-  df$slope[1] <- 0 # set slope of first value to 0
-  df$slope[2:length(df$Elevation)] <- abs(diff(df$Elevation)/ diff(df$Distance)) # calculate slope (m/m)
+  df$slope <- c(0, abs(diff(df$Elevation)/ diff(df$Distance))) # calculate slope (m/m)
   df$curvature[1] <- 0 # set curvature of first two values to 0
-  df$curvature[2:length(df$slope)] <- diff(df$slope) # calculate curvature
+  df$curvature <- c(0, diff(df$slope)) # calculate curvature
   return(df)
 })
 
-#'############################### [segmenting] ################################
-#'############################### [ profiles ] ################################
 
+```
+
+
+
+## Segmenting plots
+
+```{r}
 test <- as_tibble(df.list[[1]])
 
 # visualize to estimate break locations
 ggplot(data = test, aes(x = Distance, y = elevation, color = slope))+
   geom_point() # color by slope
 
+```
+
+
+
+```{r}
 #' [set] distance at which to relax breaks (meters), needs to be a multiple of breaks 1 & 2
 start <- 0
 point1 <- 35 # start of straight away
@@ -119,64 +140,23 @@ plot_grid(a, b, c,
           labels = c("A", "B", "C"),
           ncol = 2, nrow = 2)
 
+
 # for RUSLE outputs
 test.rusle <- test %>% 
   group_by(section) %>% 
-  summarise(distance = signif(last(Distance), digits = 2),
-            mean.slope = mean(slope) * 100,
-            first.slope = first(slope),
-            last.slope = last(slope))
+  summarise(distance = round(last(Distance), digits = 0),
+            mean.slope = mean(slope) * 100)
 
+test.rusle <- test.rusle %>%
+  mutate(length = c(breaks1, diff(distance))) %>% 
+  arrange(desc(row_number()))
 
-test.rusle$section.curv <- abs(test.rusle$first.slope - test.rusle$last.slope)
 
 print(test.rusle)
 
 
 write_xlsx(test.rusle, hert("test.rusle.xlsx"))
+```
 
 
-
-
-
-
-#'############################### [plotting profiles] ################################
-
-# stack dfs
-profiles.a <- bind_rows(df.list, .id = "source")
-
-# renames the .id column to forest name
-profiles.a <- profiles.a %>% 
-  mutate(forest = case_when(
-    source == 1 ~ "MAG",
-    source == 2 ~ "WD",
-    source == 3 ~ "LRJ",
-    source == 4 ~ "ASH",
-    source == 5 ~ "LRW",
-    source == 6 ~ "LRE",
-  ))
-
-head(profiles.a)
-
-
-#plot elevation, color by slope
-ggplot(data = profiles.a, aes(x = Distance, y = elevation, color = slope, size = pins, shape = pins))+
-  geom_point() +
-  facet_wrap(~forest, scales = "free") +
-  scale_size_manual(values = c(BS = 4, FS = 4, N = 1))
-
-# plot elevation and slope 
-coef = 10 # for scaling second axis
-ggplot(data = profiles.a, aes(x = Distance)) +
-  
-  geom_point(aes(y = elevation, size = pins)) + # first axis
-  geom_point(aes(y = slope * coef, color = curvature)) + # second axis
-  
-  scale_y_continuous(
-    name = "elevation", # first axis
-    sec.axis = sec_axis(~ . / coef , name = "slope") #' second axis [numbers only] 
-    ) +
-  
-  facet_wrap(~forest, scales = "free") +
-  scale_size_manual(values = c(BS = 4, FS = 4, N = 1))
 

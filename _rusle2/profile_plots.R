@@ -1,0 +1,184 @@
+#'############################### [setup] ################################
+
+# libraries needed
+libs <- c("ggplot2", "dplyr", "tidyr", "writexl", "cowplot", "gridGraphics")
+
+# install missing libraries
+installed_libs <- libs %in% rownames(installed.packages())
+if (any(installed_libs == F)) {
+  install.packages(libs[!installed_libs])
+}
+
+# load libraries
+lapply(libs, library, character.only = T)
+
+# enter the file path for the highest level folder you're working in 
+data_folder <- "C:/Users/natha/Box/box_data/_data/_rusle2/"
+
+# when a file is needed, call the hert() function
+# for example; data_frame = read.csv(hert("more_data/measurements_data.csv"))
+hert <- function(file) {
+  file_path = paste(data_folder, file, sep = "")
+  return(file_path)
+}
+
+#'############################### [prepping profiles] ################################
+
+# load dfs. all datasets are distinct objects but are also in the list
+df.list <- list(
+  df.1 <- read.csv(hert("MAG_profile.csv")),
+  df.2 <- read.csv(hert("WD_profile.csv")),
+  df.3 <- read.csv(hert("LRJ_profile.csv")),
+  df.4 <- read.csv(hert("ASH_profile.csv")),
+  df.5 <- read.csv(hert("LRW_profile.csv")),
+  df.6 <- read.csv(hert("LRE_profile.csv"))
+  )
+
+# calculate slope, curvature at each point
+df.list <- lapply(df.list, function(df) {
+  df$elevation <- df$Elevation - min(df$Elevation) # calculate an elevation value starting at 0
+  df$slope <- c(0, abs(diff(df$Elevation)/ diff(df$Distance))) # calculate slope (m/m)
+  df$curvature[1] <- 0 # set curvature of first two values to 0
+  df$curvature <- c(0, diff(df$slope)) # calculate curvature
+  return(df)
+})
+
+#'############################### [segmenting] ################################
+#'############################### [a profile ] ################################
+
+
+test <- as_tibble(df.list[[6]])
+
+# visualize to estimate break locations
+ggplot(data = test, aes(x = Distance, y = elevation, color = slope))+
+  geom_point() # color by slope
+
+
+###' [run below]
+
+#' [set] distance at which to relax breaks (meters), needs to be a multiple of breaks 1 & 2
+start <- 0
+point1 <- 20 # start of straight away
+point2 <- 50 # end of straight away
+end <- 90 # 150 is good in general
+
+#' [set] width of breaks (meters)
+breaks1 <- 5 # for convex
+breaks2 <- 10 # for straight away
+breaks3 <- 5 # for concave
+
+test <- test[3:nrow(test), ] %>% # 3:... to account for slope and curvature needs
+  mutate(
+    Distance = Distance - as.numeric(test[3,2]), # account for removing earlier points
+    section = coalesce(
+      cut( # TS/FS
+        Distance,
+        breaks = seq(start, point1, by = breaks1),
+        include.lowest = TRUE,
+        right = TRUE,
+        labels = sprintf("%02.1f-%02.1f", seq(start, (point1 - breaks1), by = breaks1), seq((start + breaks1), point1, by = breaks1))
+      ),
+      cut( # BS
+        Distance,
+        breaks = seq(point1, point2, by = breaks2),
+        include.lowest = FALSE,
+        right = TRUE,
+        labels = sprintf("%02.0f-%02.0f", seq(point1, (point2 - breaks2), by = breaks2), seq((point1 + breaks2), point2, by = breaks2))
+      ),
+      cut( # SH/SU
+        Distance,
+        breaks = seq(point2, end, by = breaks3),
+        include.lowest = FALSE,
+        right = TRUE,
+        labels = sprintf("%02.0f-%02.0f", seq(point2, (end - breaks3), by = breaks3), seq((point2 + breaks3), end, by = breaks3))
+      )
+    )
+  )
+
+
+#' [visualize] sections to see
+
+# data cleanup
+test.plotting <- test %>% 
+  group_by(section) %>% 
+  mutate(mean.slope = mean(slope),
+         first.slope = first(slope),
+         last.slope = last(slope))
+
+test.plotting$section.curv <- abs(test.plotting$first.slope - test.plotting$last.slope)
+
+
+# plot!
+a <- ggplot(data = test.plotting, aes(x = Distance, y = elevation, color = section))+
+  geom_point() # color by section
+
+b <- ggplot(data = test.plotting, aes(x = Distance, y = elevation, color = section.curv))+
+  geom_point() # color by section curvature
+
+c <- ggplot(data = test.plotting, aes(x = Distance, y = elevation, color = mean.slope))+
+  geom_point() # color by section slope
+
+plot_grid(a, b, c, 
+          labels = c("A", "B", "C"),
+          ncol = 2, nrow = 2)
+
+
+# for RUSLE outputs
+test.rusle <- test %>% 
+  group_by(section) %>% 
+  summarise(distance = round(last(Distance), digits = 0),
+            mean.slope = mean(slope) * 100)
+
+test.rusle <- test.rusle %>%
+  mutate(length = c(breaks1, diff(distance))) %>% 
+  arrange(desc(row_number()))
+
+
+print(test.rusle)
+
+
+write_xlsx(test.rusle, hert("test.rusle.xlsx"))
+
+
+
+
+#'############################### [plotting all profiles] ################################
+
+# stack dfs
+profiles.a <- bind_rows(df.list, .id = "source")
+
+# renames the .id column to forest name
+profiles.a <- profiles.a %>% 
+  mutate(forest = case_when(
+    source == 1 ~ "MAG",
+    source == 2 ~ "WD",
+    source == 3 ~ "LRJ",
+    source == 4 ~ "ASH",
+    source == 5 ~ "LRW",
+    source == 6 ~ "LRE",
+  ))
+
+head(profiles.a)
+
+
+#plot elevation, color by slope
+ggplot(data = profiles.a, aes(x = Distance, y = elevation, color = slope, size = pins, shape = pins))+
+  geom_point() +
+  facet_wrap(~forest, scales = "free") +
+  scale_size_manual(values = c(BS = 4, FS = 4, N = 1))
+
+# plot elevation and slope 
+coef = 10 # for scaling second axis
+ggplot(data = profiles.a, aes(x = Distance)) +
+  
+  geom_point(aes(y = elevation, size = pins, color = slope)) + # first axis
+  geom_smooth(aes(y = slope * coef)) + # second axis
+  
+  scale_y_continuous(
+    name = "elevation", # first axis
+    sec.axis = sec_axis(~ . / coef , name = "slope") #' second axis [numbers only] 
+    ) +
+  
+  facet_wrap(~forest, scales = "free") +
+  scale_size_manual(values = c(BS = 4, FS = 4, N = 1))
+

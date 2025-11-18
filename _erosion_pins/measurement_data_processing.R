@@ -1,7 +1,7 @@
 #'############################### [setup] ################################
 
 # libraries needed
-libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects")
+libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "ggthemr")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -132,10 +132,8 @@ pin.p <- output.qc %>%
 
 
 # prep values
-forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ",
-                                   "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")
+forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ", "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")
 nforests <- length(forests)
-
 
 #'############################### [calculating cumulative precipitation] ################################
 
@@ -164,28 +162,27 @@ precip.ParSci <- input.ARB %>%
   rename(precip = ppt..mm., mtemp = tmean..degrees.C.) %>% 
   mutate(cum.precip = cumsum(precip))
 
+#' [input precip data into the measurement dataframe]
 
 # need to split dataframe for calucations, etc
 pin.forests <- vector(mode = "list", length = nforests) # create empty list, nforests defined above
 
 # for loop for calcualtions
 for(i in 1:nforests) { 
-  pin.forests[[i]] <- pin.p %>% filter(forest == forests[i]) # split dataframe into list
-  site.t <- pin.forests[[i]][1,3] # extract site from forest df
+  df.t <- pin.p %>% filter(forest == forests[i]) # split dataframe into list
+  site.t <- df.t[1,3] # extract site from forest df
   precip.t <- get(paste("precip.", site.t, sep = "")) # pulls correct precip data 
-  dates.t <- unique(pin.forests[[i]][1]) # gets unique dates
+  dates.t <- unique(df.t[1]) # gets unique dates
   
   precip.t <- precip.t %>%
     filter(date >= dates.t[1,1] & date <= dates.t[6,1]) %>% # cut off data before and after mms
     select(date, cum.precip)
   
-  pin.forests[[i]] <- merge(pin.forests[[i]], precip.t, by = "date", all = FALSE) # merge precip and pins datasets based on date
+  dfprecip.t <- merge(df.t, precip.t, by = "date", all = FALSE) # merge precip and pins datasets based on date
   
-  ifelse(i == 1, pin.p2 <- pin.forests[[i]], pin.p2 <- merge(pin.p2, pin.forests[[i]], all = TRUE)) # merge data frames
+  ifelse(i == 1, pin.p2 <- dfprecip.t, pin.p2 <- merge(pin.p2, dfprecip.t, all = TRUE)) # merge data frames
+
 }
-
-head(pin.p2)
-
 
 #'############################### [fitting linear splines, elevation / date] ################################
 
@@ -194,7 +191,7 @@ head(pin.p2)
 pin.list <- vector(mode = "list", length = nforests) # create empty list
 
 for(i in 1:nforests) { # for loop to split
-  pin.list[[i]] <- pin.p2 %>% filter(forest == forests[i])
+  pin.list[[i]] <- pin.p %>% filter(forest == forests[i])
 }
 
 # create list to hold model summaries
@@ -209,7 +206,6 @@ coefs.list <- data.frame(forest = as.vector(forests),
 
 # fit lsplines and generated predicted values
 for (i in 1:nforests){
-  print(i)
   dates <- unique(pin.list[[i]]$dayof)[2:(length(unique(pin.list[[i]]$dayof))-1)] # knots at here, excludes first date
   pin.lspline <- lm(data = pin.list[[i]], mm ~ lspline(dayof, knots = dates)) # fit lspline
   pin.list[[i]]$lspline <- predict(pin.lspline) # create predictions
@@ -251,6 +247,11 @@ ggplot(data = pin.p2, mapping = aes(y = dmdt, x = cum.precip, color = worms, lin
 
 #'############################### [plotting pins and lsplines] ################################
 
+# choose a ggplot theme
+ggthemr('grape')
+ggthemr_reset()
+
+
 #' [cumulative precip plots]
 
 ggplot(data = pin.p2, mapping = aes(x = cum.precip, y = mm)) +
@@ -267,38 +268,27 @@ ggplot(data = pin.p2, mapping = aes(x = cum.precip, y = mm)) +
 ggplot(data = pin.ls, mapping = aes(x = date, y = mm)) +
   geom_line(aes(group = pin, color = slope_pos)) +
   geom_boxplot(aes(group = forest_date, fill = forest)) +
-  geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1) +
-  facet_wrap(~forest, scale = "free_x") +
+  geom_line(aes(x = date, y = lspline), color = "black", , linewidth = 1, linetype = 2) +
+  facet_wrap(~forest) +
   scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
   geom_hline(yintercept = 0) # all sites
 
 ggplot(data = filter(pin.ls, site == "ARB" | site == "LR"), mapping = aes(x = date, y = mm)) +
-  geom_line(aes(group = pin, color = slope_pos)) +
+  geom_line(aes(group = pin, linetype =  slope_pos)) +
   geom_boxplot(aes(group = forest_date, fill = forest)) +
-  geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1) +
+  geom_line(aes(x = date, y = lspline), color = "black", , linewidth = 1, linetype = 2) +
   facet_wrap(~forest) +
   scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
   geom_hline(yintercept = 0) # LR and ARB
 
-ggplot(data = filter(pin.ls, site == "Par-Sci"), mapping = aes(x = date, y = mm)) +
-  geom_line(aes(group = pin, color = slope_pos)) +
+ggplot(data = filter(pin.ls, site == "ParSci"), mapping = aes(x = date, y = mm)) +
+  geom_line(aes(group = pin, linetype =  slope_pos)) +
   geom_boxplot(aes(group = forest_date, fill = forest)) +
-  geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1) +
-  facet_wrap(~forest, scale = "free_x") +
+  geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1, linetype = 2) +
+  facet_wrap(~forest, ncol = 4) +
   scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
-  geom_hline(yintercept = 0) # Par-Sci
-
-
-
-
-
-
-
-
-
-
-
-
+  geom_hline(yintercept = 0, linewidth = 1, color = "gray41") # Par-Sci
+    
 
 
 #'############################### [stats - forests OLD] ################################
@@ -331,6 +321,7 @@ forest.date.t <- forest.t %>% mutate(forest_date = interaction(forest, date, sep
 ggplot(forest.date.t, aes(x = forest_date, y = mm, fill = forest)) +
   geom_boxplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
 
 
 #' [fitting lms for each forest and slope pos]
