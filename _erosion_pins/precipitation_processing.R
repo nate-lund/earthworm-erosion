@@ -24,51 +24,42 @@ hert <- function(file) {
 
 #'############################### [mostly for trial and error here] ################################
 
-# input data, for now just dealing with arb
-input.arb <- read.csv(hert("_precip/ARB_PRISM_July1-Oct1.csv"), skip = 10)
-input.lr <- read.csv(hert("_precip/LR_PRISM_July1-Oct1.csv"), skip = 10)
-input.p <- bind_rows(input.arb, input.lr, .id = "site")
+# pull precip data from box
+precip.list <- list(
+  read.csv(hert("_precip/ARB_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/LR_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/RC_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/LM_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/RHN_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/RHS_PRISM_July1-Oct15.csv"), skip = 10)
+)
 
+# format data for processing
+precip.list <- lapply(precip.list, function(df) {
+  df <- mutate(df, date = as.Date(Date),
+               precip = ppt..inches. / 2.54,
+               mtemp = (tmean..degrees.F. - 32) * 5 / 9,
+               cum.precip = cumsum(precip),
+               .keep = "unused")
+  return(df)
+})
 
-# formatting 
-input.arb <- input.arb %>%
-  mutate(date = as.Date(Date), .keep = "unused") %>% 
-  rename(precip = ppt..mm., mtemp = tmean..degrees.C.)
+precip.all <- bind_rows(precip.list, .id = "id")
 
-# formatting 
-input.lr <- input.lr %>%
-  mutate(date = as.Date(Date), .keep = "unused") %>% 
-  rename(precip = ppt..mm., mtemp = tmean..degrees.C.)
-
-input.p <- bind_rows(input.arb, input.lr, .id = "id")
-
-input.p <- input.p %>% 
+precip.all <- precip.all %>% 
   mutate(site = case_when(
     id == 1 ~ "ARB",
-    id == 2 ~ "LR"
+    id == 2 ~ "LR",
+    id == 3 ~ "RC",
+    id == 4 ~ "LM",
+    id == 5 ~ "RHN",
+    id == 6 ~ "RHS",
   ))
 
-head(input.p)
+head(precip.all)
 
 
 # plot hydrographs
-ggplot(input.p, mapping = aes(x = date, y = precip)) +
+ggplot(precip.all, mapping = aes(x = date, y = precip)) +
   geom_col() +
   facet_wrap(~site, ncol = 1)
-
-
-
-
-
-#'############################### [interseting code chunk, junk] ################################
-
-# mutate(mm.period = case_when( # sections the precip by measurement period
-#   date > dates.t[1,1] & date < dates.t[2,1] ~ dates.t[2,1],
-#   date >= dates.t[2,1] & date < dates.t[3,1] ~ dates.t[3,1],
-#   date >= dates.t[3,1] & date < dates.t[4,1] ~ dates.t[4,1],
-#   date >= dates.t[4,1] & date < dates.t[5,1] ~ dates.t[5,1],
-#   date >= dates.t[5,1] & date <= dates.t[6,1] ~ dates.t[6,1],
-#   TRUE ~ dates.t[1,1])) %>% 
-#   group_by(mm.period) %>% 
-#   summarise(cum.precip = sum(precip)) %>% # sum precip over measurement periods
-#   rename(date = mm.period)
