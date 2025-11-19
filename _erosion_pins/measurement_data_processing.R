@@ -254,48 +254,147 @@ ggplot(data = pin.p2, mapping = aes(y = dmdt, x = cum.precip, color = worms, lin
 
 write_xlsx(coefs.list, hert("_analysis/lsp_coefs.xlsx"))
 
-#'############################### [plotting pins and lsplines] ################################
+#'############################### [plotting pins] ################################
+#'############################### [ and precip  ] ################################
+
+#'############################### [pins] ################################
 
 # split
 forest.list <- vector(mode = "list", length = nforests) # create empty list
-
 for(i in 1:nforests) { # for loop to split
   forest.list[[i]] <- pin.ls %>% filter(forest == forests[i])
 }
 
-# format data for processing
-plots.list <- lapply(forest.list, function(df) {
+
+# create plots
+pins.plots <- lapply(forest.list, function(df) {
+  forest_name <- unique(df$forest)
+  title_text <- if_else(length(forest_name) == 1, forest_name, paste(forest_name, collapse = ", "))
+
   a <- ggplot(data = df, mapping = aes(x = date, y = mm)) +
-    geom_line(aes(group = pin, linetype =  slope_pos, color = forest)) +
-    geom_boxplot(aes(group = forest_date, fill = forest)) +
+    geom_line(aes(group = pin, color =  slope_pos)) +
+    geom_boxplot(aes(group = forest_date), width = 1.5) +
     geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1, linetype = 2) +
-    scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
-    scale_x_date(limits = c(ymd("2025-07-01"), ymd("2025-10-15"))) +
-    geom_hline(yintercept = 0)
+    #scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
+    #scale_x_date(limits = c(ymd("2025-07-01"), ymd("2025-10-15"))) +
+    geom_hline(yintercept = 0) +
+    ggtitle(label = title_text) +
+    theme(legend.position = "none")
+  
   return(a)
 })
 
-plots.list[2]
 
-plot_grid()
+# get legend
+legend <- get_legend(
+  pins.plots[[1]] + theme(legend.position = "right")
+)
 
-# ploting lines, splines, and boxplots
-ggplot(data = pin.ls, mapping = aes(x = date, y = mm)) +
-  geom_line(aes(group = pin, linetype =  slope_pos, color = worms)) +
-  geom_boxplot(aes(group = forest_date, fill = forest)) +
-  geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1, linetype = 2) +
-  facet_wrap(~forest, nrow = 3) +
-  scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
-  scale_x_date(limits = c(ymd("2025-07-01"), ymd("2025-10-15"))) +
-  geom_hline(yintercept = 0) # all sites
+plot_grid(legend, plotlist = pins.plots) # plot all plots
 
-ggplot(data = filter(pin.ls, forest == "IH"), mapping = aes(x = date, y = mm)) +
-  geom_line(aes(group = pin, color = slope_pos)) +
-  geom_boxplot(aes(group = forest_date, fill = forest)) +
-  geom_line(aes(x = date, y = lspline), color = "black", , linewidth = 1, linetype = 2) +
-  facet_wrap(~forest) +
-  scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
-  geom_hline(yintercept = 0) # IH
+pins.plots[6] # plot a single plot
+
+
+#'############################### [precip] ################################
+
+# pull precip data from box
+precip.list <- list(
+  read.csv(hert("_precip/ARB_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/LR_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/RC_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/LM_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/RHN_PRISM_July1-Oct15.csv"), skip = 10),
+  read.csv(hert("_precip/RHS_PRISM_July1-Oct15.csv"), skip = 10)
+)
+
+# format data for processing
+precip.list <- lapply(precip.list, function(df) {
+  df <- mutate(df, date = as.Date(Date),
+               precip = ppt..inches. / 2.54,
+               mtemp = (tmean..degrees.F. - 32) * 5 / 9,
+               cum.precip = cumsum(precip),
+               site = "?",
+               .keep = "unused")
+  return(df)
+})
+
+
+forests
+
+# create a new list, with one hydrograph for each forest. assign the correct site to the correct forest
+forestp.list <- list(
+  precip.list[[1]],
+  precip.list[[2]],
+  precip.list[[2]],
+  precip.list[[1]],
+  precip.list[[1]],
+  precip.list[[2]],
+  precip.list[[3]],
+  precip.list[[4]],
+  precip.list[[5]],
+  precip.list[[3]],
+  precip.list[[4]],
+  precip.list[[5]],
+  precip.list[[6]]
+)
+
+# create plots
+precip.plots <- lapply(forestp.list, function(df) {
+  
+  b <- ggplot(data = df, mapping = aes(x = date, y = precip)) +
+    geom_col()
+
+  return(b)
+})
+
+plot_grid(plotlist = precip.plots)
+
+
+
+#'############################### [together] ################################
+
+pins.plots # pins
+precip.plots # precip
+
+# create global env objects from plot lists, named by titles
+for (i in seq_along(pins.plots)) { #' [pins]
+  p <- pins.plots[[i]]
+  
+  # Extract the title from the ggplot object
+  title <- p$labels$title
+  
+  # Sanitize the title to make it a valid R object name
+  safe_name <- paste(make.names(title), ".plot", sep = "")
+  
+  # Assign the plot to a variable with that name
+  assign(safe_name, p, envir = .GlobalEnv)
+}
+
+
+for (i in seq_along(pins.plots)) { #' [precip]
+  p <- precip.plots[[i]]
+  
+  # Extract the title from the ggplot object
+  title <- p$labels$title
+  
+  # Sanitize the title to make it a valid R object name
+  safe_name <- paste(make.names(title), ".plot", sep = "")
+  
+  # Assign the plot to a variable with that name
+  assign(safe_name, p, envir = .GlobalEnv)
+}
+
+plot_grid(LME.plot, LMJ.plot)
+
+
+
+
+
+
+
+
+
+
 
 
 #'############################### [stats - forests OLD] ################################
