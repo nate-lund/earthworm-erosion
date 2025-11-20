@@ -1,7 +1,7 @@
 #'############################### [setup] ################################
 
 # libraries needed
-libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics")
+libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -174,22 +174,41 @@ pin.forests <- vector(mode = "list", length = nforests) # create empty list, nfo
 
 # for loop for calculations
 for(i in 1:nforests) { 
+  # setup
   df.t <- pin.p %>% filter(forest == forests[i]) # split dataframe into list
   site.t <- df.t[1,3] # extract site from forest df
-  precip.t <- get(paste("precip.", site.t, sep = "")) # pulls correct precip data 
-  # dates.t <- unique(df.t[1]) # gets unique dates
-  
-  # precip.t <- precip.t %>%
-  #   filter(date >= dates.t[1,1] & date <= dates.t[6,1]) %>% # cut off data before and after mms
-  #   select(date, cum.precip)
+  precip.t <- as.data.frame(get(paste("precip.", site.t, sep = ""))[[1]]) # pulls correct precip data 
 
+  
+  # for precip per chunk
+  dates.t <- unique(df.t[1]) # gets unique dates
+  
+  precip.t <- precip.t %>%
+    mutate(period = case_when( # precip on the day of measurement counts towards only the next period
+      date == dates.t[1,] ~ 0,
+      date > dates.t[1,] & date <= dates.t[2,] ~ 1,
+      date > dates.t[2,] & date <= dates.t[3,] ~ 2,
+      date > dates.t[3,] & date <= dates.t[4,] ~ 3,
+      date > dates.t[4,] & date <= dates.t[5,] ~ 4,
+      date > dates.t[5,] & date <= dates.t[6,] ~ 5,
+      date > dates.t[6,] & date <= dates.t[7,] ~ 6,
+      TRUE ~ NA # first measurement will be set to 0
+    )) %>% 
+    
+    drop_na(period) %>% 
+    group_by(period) %>% 
+    mutate(period.sum = sum(precip, na.rm = TRUE)) %>%
+    ungroup() %>% 
+    select(-period)
+  
   dfprecip.t <- merge(df.t, precip.t, by = "date", all = FALSE) # merge precip and pins datasets based on date
   
-  ifelse(i == 1, pin.p2 <- dfprecip.t, pin.p2 <- merge(pin.p2, dfprecip.t, all = TRUE)) # merge data frames
+  ifelse(i == 1, pin.p2 <- dfprecip.t, pin.p2 <- merge(pin.p2, dfprecip.t, all = TRUE)) # merge consecutive forest data frames
 
 }
 
 write_xlsx(pin.p2, hert("_analysis/pins-with-precip.xlsx"))
+
 
 #'############################### [fitting linear splines, elevation / date] ################################
 
@@ -201,41 +220,51 @@ for(i in 1:nforests) { # for loop to split
   pin.list[[i]] <- pin.p2 %>% filter(forest == forests[i])
 }
 
-# create list to hold model summaries
-coefs.list <- data.frame(forest = as.vector(forests),
-                         intercept = rep(NA, times = nforests),
-                         slope1 = rep(NA, times = nforests),
-                         slope2 = rep(NA, times = nforests),
-                         slope3 = rep(NA, times = nforests),
-                         slope4 = rep(NA, times = nforests),
-                         slope5 = rep(NA, times = nforests)) 
-
 
 # fit lsplines and generated predicted values
 for (i in 1:nforests){
+  # fit lspline
   dates <- unique(pin.list[[i]]$dayof)[2:(length(unique(pin.list[[i]]$dayof))-1)] # knots at here, excludes first date
+  
   pin.lspline <- lm(data = pin.list[[i]], mm ~ lspline(dayof, knots = dates)) # fit lspline
   pin.list[[i]]$lspline <- predict(pin.lspline) # create predictions
-  coefs.t <- coefficients(pin.lspline)
-  coefs.list[i,2:7] <- c(coefs.t, rep(NA, ncol(coefs.list) - length(coefs.t)))  # store model summary
-  ifelse(i == 1, pin.ls <- pin.list[[i]], pin.ls <- merge(pin.ls, pin.list[[i]], all = TRUE)) # merge data frames
-}
-
-head(as_tibble(pin.ls))
+  
+  ifelse(i == 1,
+         pin.ls <- pin.list[[i]],
+         pin.ls <- merge(pin.ls, pin.list[[i]], all = TRUE)) # merge data frames
+  
+  # save coefficients
+  coefs.t <- tidy(pin.lspline)
+  coefs.t$forest = forests[i]
+  
+  ifelse(i == 1,
+         coefs.list <- coefs.t,
+         coefs.list <- merge(coefs.list, coefs.t, all = TRUE)) # merge data frames
+  }
 
 write_xlsx(pin.ls, hert("_analysis/pins-with-lspline.xlsx"))
 
+write_xlsx(coefs.list, hert("_analysis/lsp_coefs.xlsx"))
+
+
 #'############################### [summary stats for lsplines] ################################
 
+coefs.wide <- coefs.list %>%
+  mutate(term = case_when(
+    term == "(Intercept)" ~ "intercept",
+    term == "lspline(dayof, knots = dates)1" ~ "slope.1",
+    term == "lspline(dayof, knots = dates)2" ~ "slope.2",
+    term == "lspline(dayof, knots = dates)3" ~ "slope.3",
+    term == "lspline(dayof, knots = dates)4" ~ "slope.4",
+    term == "lspline(dayof, knots = dates)5" ~ "slope.5",
+  )) %>% 
+  pivot_wider(
+    names_from = term,
+    values_from = c(estimate, std.error, statistic, p.value)
+  )
 
-#' [WIP here]
+    
 
-# pivot coef list
-coefs.longer <- coefs.list %>% 
-  pivot_longer(
-    cols = starts_with("slope"),
-    names_to = "slope_id",
-    values_to = "slope")
 
 # calculate average erosion 
 coefs.sum <- coefs.longer %>% 
@@ -243,19 +272,25 @@ coefs.sum <- coefs.longer %>%
   summarise(ave_slope = mean(slope, na.rm = TRUE)) %>% 
   mutate("erosion (cm/yr)" = ave_slope * 365 / 10)
 
+
 # WIP plot by period
-ggplot(data = coefs.longer, mapping = aes(y = slope, x = slope_id, color = forest)) +
-  geom_point()
+ggplot(data = coefs.list, mapping = aes(y = estimate, x = forest)) +
+  geom_boxplot()
+
+
+
+
+#'geom_boxplot()#'############################### [plotting pins] ################################
+#'############################### [ and precip  ] ################################
+
+
+#'############################### [cumulative precip per period] ################################
 
 # WIP plot dmdt / precip
-ggplot(data = pin.p2, mapping = aes(y = dmdt, x = cum.precip, color = worms, linetype = worms)) +
+ggplot(data = pin.ls, mapping = aes(y = dmm, x = period.sum, color = forest)) +
   geom_jitter() +
-  geom_smooth(method = "lm", se = TRUE, color = "black")
-
-write_xlsx(coefs.list, hert("_analysis/lsp_coefs.xlsx"))
-
-#'############################### [plotting pins] ################################
-#'############################### [ and precip  ] ################################
+  geom_smooth(method = "lm", se = TRUE) +
+  facet_wrap(~worms)
 
 #'############################### [pins] ################################
 
@@ -276,8 +311,9 @@ pins.plots <- lapply(forest.list, function(df) {
     geom_boxplot(aes(group = forest_date), width = 1.5) +
     geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1, linetype = 2) +
     #scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
-    #scale_x_date(limits = c(ymd("2025-07-01"), ymd("2025-10-15"))) +
+    scale_x_date(limits = c(ymd("2025-07-01"), ymd("2025-10-15"))) +
     geom_hline(yintercept = 0) +
+    theme(axis.title.x = element_blank()) +
     ggtitle(label = title_text) +
     theme(legend.position = "none")
   
@@ -307,47 +343,35 @@ precip.list <- list(
   read.csv(hert("_precip/RHS_PRISM_July1-Oct15.csv"), skip = 10)
 )
 
-# format data for processing
-precip.list <- lapply(precip.list, function(df) {
-  df <- mutate(df, date = as.Date(Date),
+sites = c("ARB", "LR", "RC", "LM", "RHN", "RHS")
+nsites = length(sites)
+
+for (i in 1:nsites){
+  df.t <- precip.list[[i]]
+  df.t <- mutate(df.t, date = as.Date(Date),
                precip = ppt..inches. / 2.54,
                mtemp = (tmean..degrees.F. - 32) * 5 / 9,
                cum.precip = cumsum(precip),
-               site = "?",
+               site = sites[i],
                .keep = "unused")
-  return(df)
-})
-
-
-forests
-
-# create a new list, with one hydrograph for each forest. assign the correct site to the correct forest
-forestp.list <- list(
-  precip.list[[1]],
-  precip.list[[2]],
-  precip.list[[2]],
-  precip.list[[1]],
-  precip.list[[1]],
-  precip.list[[2]],
-  precip.list[[3]],
-  precip.list[[4]],
-  precip.list[[5]],
-  precip.list[[3]],
-  precip.list[[4]],
-  precip.list[[5]],
-  precip.list[[6]]
-)
+  precip.list[[i]] <- df.t
+}
 
 # create plots
-precip.plots <- lapply(forestp.list, function(df) {
+precip.plots <- lapply(precip.list, function(df) {
+  site_name <- unique(df$site)
+  title_text <- if_else(length(site_name) == 1, site_name, paste(site_name, collapse = ", "))
   
   b <- ggplot(data = df, mapping = aes(x = date, y = precip)) +
-    geom_col()
+    geom_col() +
+    theme(axis.title.x = element_blank()) +
+    ggtitle(label = title_text)
 
   return(b)
 })
 
-plot_grid(plotlist = precip.plots)
+plot_grid(ncol = 1,
+          plotlist = precip.plots) #plot all plots
 
 
 
@@ -371,7 +395,7 @@ for (i in seq_along(pins.plots)) { #' [pins]
 }
 
 
-for (i in seq_along(pins.plots)) { #' [precip]
+for (i in seq_along(precip.plots)) { #' [precip]
   p <- precip.plots[[i]]
   
   # Extract the title from the ggplot object
@@ -384,7 +408,24 @@ for (i in seq_along(pins.plots)) { #' [precip]
   assign(safe_name, p, envir = .GlobalEnv)
 }
 
-plot_grid(LME.plot, LMJ.plot)
+# LR and ARB
+plot_grid(ncol = 3, nrow = 4,
+          ASH.plot, LRE.plot, LRW.plot,
+          ARB.plot, LR.plot, LR.plot,
+          MAG.plot, WD.plot, LRJ.plot,
+          ARB.plot, ARB.plot, LR.plot)
+
+# Par-Sci
+plot_grid(ncol = 4, nrow = 4,
+          RCJ.plot, LMJ.plot, NH.plot, PLH.plot,
+          RC.plot, LM.plot, RHN.plot, RHS.plot,
+          RCE.plot, LME.plot, IH.plot, legend,
+          RC.plot, LM.plot, RHN.plot)
+
+
+
+
+
 
 
 
@@ -398,6 +439,8 @@ plot_grid(LME.plot, LMJ.plot)
 
 
 #'############################### [stats - forests OLD] ################################
+#'############################### [stats - forests OLD] ################################
+
 
 #' [plotting pin elevation (mm, in mm) over time by forest] 
 
