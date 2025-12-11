@@ -264,6 +264,7 @@ coefs.wide <- coefs.list %>%
   )
 
     
+write_xlsx(coefs.wide, hert("_analysis/lsp_coefs_wide.xlsx"))
 
 
 # calculate average erosion 
@@ -280,17 +281,19 @@ ggplot(data = coefs.list, mapping = aes(y = estimate, x = forest)) +
 
 
 
-#'geom_boxplot()#'############################### [plotting pins] ################################
+#'############################### [plotting pins] ################################
 #'############################### [ and precip  ] ################################
 
 
 #'############################### [cumulative precip per period] ################################
 
+filter.pin.ls <- pin.ls %>% filter(forest != "IH")
+
 # WIP plot dmdt / precip
-ggplot(data = pin.ls, mapping = aes(y = dmm, x = period.sum, color = forest)) +
-  geom_jitter() +
+ggplot(data = filter.pin.ls, mapping = aes(y = dmm, x = period.sum, linetype = forest)) +
+  geom_jitter(aes(color = forest)) +
   geom_smooth(method = "lm", se = TRUE) +
-  facet_wrap(~worms)
+  facet_wrap(~worms, ncol = 1)
 
 #'############################### [pins] ################################
 
