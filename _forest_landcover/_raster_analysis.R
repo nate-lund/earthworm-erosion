@@ -35,7 +35,7 @@ hert <- function(file) {
 # Elevation, slope, and curvature can be extracted from Minnesota LiDAR data found at MNTopo (<http://arcgis.dnr.state.mn.us/maps/mntopo/>). The raw LiDAR data can be downloaded directly from the website. LiDAR data is in NAD83 w/ elevation in meters.
 
 #'############################### [importing spatial data] ################################
-
+#  ----
 # import rasters
 dem <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_USGS30m_DEM_r")
 slope <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_USGS30m_slope_r")
@@ -105,11 +105,95 @@ huc12.84 <- st_as_sf(huc12) %>% st_transform(crs = 4326)
 states.sf <- st_as_sf(states)
 states.84 <- st_as_sf(states) %>% st_transform(crs = 4326)
 
+#'############################### [rusle2 per land cover] ################################
+# Section 1 -------------------
+
+
+
+# input the raster needed for statics here
+landcover <- landcover # call landcover
+raster.in <- rusle2 # call slope raster
+
+#' [TERRA][simple] ---------------------------------------------------------------
+# calculate a quick mean, median, max, and min for each land cover
+
+landcover.int <- as.int(landcover) # land cover needs to be an integer, not categorical
+
+zonal.stats <- data.frame("landcover" = c("NoData",
+                                          "1 Temperate or Subpolar Needleaf Forest",
+                                          "5 Temperate or Subpolar Broadleaf Deciduous Forest",
+                                          "6 Mixed Forest",
+                                          "8 Temperate or Subpolar Shrubland",
+                                          "10 Temperate or Subpolar Grassland",
+                                          "14 Wetland",
+                                          "15 Cropland",
+                                          "16 Barren Land",
+                                          "17 Urban and Built-up",
+                                          "18 Water"),
+                          "count" = freq(landcover.int)[,3],
+                          "mean" = terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2],
+                          "median" = terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2],
+                          "max" = terra::zonal(raster.in, landcover.int, "max", na.rm = TRUE)[,2],
+                          "min" = terra::zonal(raster.in, landcover.int, "min", na.rm = TRUE)[,2],
+                          "sum" = terra::zonal(raster.in, landcover.int, "sum", na.rm = TRUE)[,2]) %>% 
+  drop_na()
+
+
+tibble(zonal.stats) # print
+
+write.csv(zonal.stats, hert("_analysis/rusle2-landcover-stats.csv")) # export to excel
+
+
+
+#' [TERRA][histograms] ---------------------------------------------------------------
+# generate histograms for each landcover ----
+
+# define rusle2 bins
+start = -1 # start of bins
+end = 10 # end of bins
+width = .1 # bin spacing
+
+# create a matrix of the bin distributions
+bins <- data.frame(A = seq(from = start, to = end - width, by = width),
+                   B = seq(from = start - -width, to = end, by = width), #check the sign in "from"
+                   "bin" = seq(from = start, to = end - width, by = width))
+slope.bins <- as.matrix(bins)
+
+
+slope.binned <- classify(raster.in, slope.bins) # apply bins to slope raster
+
+# tabulate area - how many unique combinations are there, and how many cells are in each?
+stack <- c(landcover, slope.binned) # stack land cover and binned slope raseters
+stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
+
+stack.area.t <- stack.area %>%
+  drop_na() %>% 
+  group_by(land_cover) %>% 
+  mutate(nsum = sum(n)) %>% 
+  ungroup() %>% 
+  mutate(frac = n / nsum)
+
+
+# plot bins for each land cover
+ggplot(data = stack.area.t, mapping = aes(y = frac, x = GL_RUSLE2_30m_raster_r)) +
+  geom_col() +
+  scale_x_continuous(limits = c(-1, 10)) +
+  facet_wrap(~land_cover, ncol = 2, scales = "free_y") +
+  geom_vline(xintercept = -0.534) # mean of... cropland
+
+
+# export
+write.csv(stack.area, hert("_analysis/rusle2-landcover-hist.csv")) # export df to plot later
+
+
+
+
+
 #'############################### [slope per land cover] ################################
 
 # input the raster needed for statics here
-landcover <- as.int(landcover) # landcover is also needed
-raster.in <- slope # make log(slope) raster
+landcover <- landcover # landcover is also needed
+raster.in <- slope # call slope raster
 
 
 #' [TERRA][simple] ---------------------------------------------------------------
@@ -129,7 +213,7 @@ zonal.stats <- data.frame("landcover" = c("NoData",
                                           "17 Urban and Built-up",
                                           "18 Water",
                                           "NA"),
-                          "count" = freq(landcover)[,3],
+                          "count" = freq(landcover.int)[,3],
                           "mean" = terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2],
                           "median" = terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2],
                           "max" = terra::zonal(raster.in, landcover.int, "max", na.rm = TRUE)[,2],
@@ -137,7 +221,10 @@ zonal.stats <- data.frame("landcover" = c("NoData",
   drop_na()
 
 
-print(tibble(zonal.stats))
+tibble(zonal.stats) # print
+
+write.csv(zonal.stats, hert("_analysis/slope-landcover-stats.csv")) # export to excel
+
 
 
 
@@ -162,7 +249,7 @@ slope.binned <- classify(raster.in, slope.bins) # apply bins to slope raster
 stack <- c(landcover, slope.binned) # stack land cover and binned slope raseters
 stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
 
-stack_area.t <- stack_area %>%
+stack.area.t <- stack.area %>%
   drop_na() %>% 
   group_by(land_cover) %>% 
   mutate(nsum = sum(n)) %>% 
@@ -171,10 +258,15 @@ stack_area.t <- stack_area %>%
 
 
 # plot bins for each land cover
-ggplot(data = stack_area.t, mapping = aes(y = frac, x = GL_USGS30m_slope_r)) +
+ggplot(data = stack.area.t, mapping = aes(y = frac, x = GL_USGS30m_slope_r)) +
   geom_col() +
+  scale_x_continuous(limits = c(0, 50)) +
   facet_wrap(~land_cover, ncol = 2, scales = "free_y") +
   geom_vline(xintercept = -0.534) # mean of... cropland
+
+
+# export
+write.csv(stack.area, hert("_analysis/slope-landcover-hist.csv")) # export df to plot later
 
 
 #' [TERRA][slope bins table] ---------------------------------------------------------------
@@ -214,8 +306,13 @@ stack.vis <- stack.sum %>%
   pivot_wider(names_from = slope_class,
               values_from = frac)
 
+# export
+write.csv(stack.vis, hert("_analysis/slope-landcover-bins.csv")) # export clean table for manuscript
+write.csv(stack.sum, hert("_analysis/slope-landcover-bins-plots.csv")) # export df to plot later
+
+
 # plot bins for each land cover
-ggplot(data = stack.sum, mapping = aes(y = frac, x = land_cover.1)) +
+ggplot(data = stack.sum, mapping = aes(y = frac, x = slope_class)) +
   geom_col() +
   facet_wrap(~land_cover, ncol = 2, scales = "free_y") +
   geom_vline(xintercept = -0.534) # mean of... cropland
@@ -223,11 +320,11 @@ ggplot(data = stack.sum, mapping = aes(y = frac, x = land_cover.1)) +
 
 
 
-#' [TERRA][plotting / visualization] ---------------------------------------------------------------
+#' [TERRA / LEAFLET][plotting / visualization] ---------------------------------------------------------------
 # for slope. this can be run after either the histogram or table chunk above
 
 # sample the raster to reduce size
-factor = 100000 #factor to sample down to
+factor = 1000000 # factor to sample down to
 
 lc.sample <- spatSample(landcover, size = factor, method = "regular", as.raster = TRUE)
 slope.sample <- spatSample(slope, size = factor, method = "regular", as.raster = TRUE)
@@ -235,19 +332,43 @@ slope.sample <- spatSample(slope, size = factor, method = "regular", as.raster =
 # establish parameters 
 landcover.classes <- levels(landcover)[[1]]$land_cover
 landcover.values  <- levels(landcover)[[1]]$ID
-landcover.colors <- c("darkgrey","darkgreen", "limegreen", "lightgreen", "beige", "lightyellow", "darkblue", "yellow", "brown", "red", "blue")
+landcover.colors <- c("grey","darkgreen", "palegreen4", "lightgreen", "cadetblue3", "lightcyan", "darkblue", "lightgoldenrod", "brown", "grey42", "blue")
+
+slope.values <- values(slope.sample) # slope sample to improve performance
+
+# #normalize slope to [0,1] for alpha
+alpha.values <- scales::rescale(slope.values, to = c(0.2, 1.0)) # Scale from 0.2 to 1.0
+# alpha.values <- (slope.values - min(slope.values, na.rm = TRUE)) /
+#   (max(slope.values, na.rm = TRUE) - min(slope.values, na.rm = TRUE)) # idk if this is needed
+
+#--------------------
+
+r = slope.sample
+values = values(slope.sample)
+pal_func <- colorNumeric(c("red", "blue"), values(r), na.color = "transparent")
+
+opacity_values <- scales::rescale(values(r), to = c(0.2, 1.0)) # Scale from 0.2 to 1.0
+color_vector <- pal_func(values(r))
 
 
+
+#---------------------
+
+# create color pallets
 pal <- colorFactor(palette = landcover.colors,
                    domain  = landcover.values,
-                   na.color = "transparent")
+                   na.color = "transparent") # pallet for landcover
 
+
+pal.slope <- colorNumeric(palette = c("transparent", "black"),
+                          domain = slope.values,
+                          na.color = "transparent") # pallet for slope
 
 #' [plot only landcover]
 leaflet() %>% addTiles() %>% 
   addRasterImage(lc.sample,
                  colors = pal,
-                 opacity = 0.7) %>% 
+                 opacity = alpha.values) %>% 
   addLegend("topright",
             pal = pal, 
             values = landcover.values,
@@ -258,26 +379,13 @@ leaflet() %>% addTiles() %>%
 
 
 #' [plot landcover, opacity for slope]
-# uses above land cover parameters 
-
-# #normalize slope to [0,1] for alpha
-# slope.vals <- values(slope)
-# alpha.vals <- (slope_vals - min(slope_vals, na.rm = TRUE)) /
-#   (max(slope_vals, na.rm = TRUE) - min(slope_vals, na.rm = TRUE)) # idk if this is needed
-
-
-pal.slope <- colorNumeric(palette = c("transparent", "Black"),
-                          domain = values(slope),
-                          na.color = "transparent")
-
-# plot
 leaflet() %>% addTiles() %>% 
   addRasterImage(lc.sample,
                  colors = pal,
                  opacity = 0.7) %>% 
   addRasterImage(slope.sample,
                  colors = pal.slope,
-                 opacity = 0.4) %>% 
+                 opacity = slope.values) %>% 
   addLegend("topright",
             pal = pal, 
             values = landcover.values,
@@ -286,7 +394,13 @@ leaflet() %>% addTiles() %>%
               landcover.classes[match(x, landcover.values)]
             }))
 
+# ploting messing
 
+lc.sl <- c(lc.sample, slope.sample)
+
+leaflet() %>% addTiles() %>% 
+  addRasterImage(lc.sl,
+                 opacity = slope.sample)
 
 # #' [plotting in ggplot]
 
