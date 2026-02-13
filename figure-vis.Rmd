@@ -1,0 +1,118 @@
+---
+title: "Untitled"
+output: html_document
+date: "2026-02-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# libraries needed
+libs <- c("flextable")
+
+# install missing libraries
+installed_libs <- libs %in% rownames(installed.packages())
+if (any(installed_libs == F)) {
+  install.packages(libs[!installed_libs])
+}
+
+# load libraries
+lapply(libs, library, character.only = T)
+
+# enter the file path for the highest level folder you're working in 
+data_folder <- "C:/Users/natha/Box/box_data/_data/_erosion_pins/"
+
+# when a file is needed, call the hert() function
+# for example; data_frame = read.csv(hert("more_data/measurements_data.csv"))
+hert <- function(file) {
+  file_path = paste(data_folder, file, sep = "")
+  return(file_path)
+}
+
+```
+
+Flextable bookdown: <https://ardata-fr.github.io/flextable-book/index.html>
+
+```{r}
+set_flextable_defaults(
+  font.size = 10, theme_fun = theme_vanilla,
+  padding = 6,
+  background.color = "white")
+
+ft <- flextable(final.table,
+                col_keys = c("forest",
+                             "slope_pos",
+                             "blank",
+                             "estimate_slope.1",
+                             "m_error_slope.1",
+                             "p.value_slope.1",
+                             "blank1",
+                             "estimate_slope.2",
+                             "m_error_slope.2",
+                             "p.value_slope.2",
+                             "blank2",
+                             "estimate_slope.3",
+                             "m_error_slope.3",
+                             "p.value_slope.3",
+                             "blank3",
+                             "estimate_slope.4",
+                             "m_error_slope.4",
+                             "p.value_slope.4",
+                             "blank4",
+                             "estimate_slope.5",
+                             "m_error_slope.5",
+                             "p.value_slope.5")) %>% 
+  empty_blanks() %>% 
+  highlight(i = ~ p.value_slope.1 < 0.1, color = "wheat", j = c("estimate_slope.1")) %>% 
+  highlight(i = ~ p.value_slope.2 < 0.1, color = "wheat", j = c("estimate_slope.2")) %>% 
+  highlight(i = ~ p.value_slope.3 < 0.1, color = "wheat", j = c("estimate_slope.3")) %>% 
+  highlight(i = ~ p.value_slope.4 < 0.1, color = "wheat", j = c("estimate_slope.4")) %>% 
+  highlight(i = ~ p.value_slope.5 < 0.1, color = "wheat", j = c("estimate_slope.5"))
+
+
+
+ft <- add_header_row(ft, values = c("Site",
+                                    "Period 1",
+                                    "Period 2",
+                                    "Period 3",
+                                    "Period 4",
+                                    "Period 5"),
+                     colwidths = c(2, # adds up to 17
+                                   4,
+                                   4,
+                                   4,
+                                   4,
+                                   4))
+
+ft <- add_footer_lines(ft, "hello note") %>% 
+  align(align = "center", part = "all") %>% 
+  valign(valign = "center", part = "header") 
+
+# qflextable(ft) %>% 
+#   color(~ p.value_slope.1 < 0.05, color = "orange", ~ p.value_slope.1 + m_error_slope.1 + estimate_slope.1)
+
+ft <- labelizor(
+  x = ft, 
+  part = "header", 
+  labels = c("forest" = "Site",
+             "slope_pos" = "Slope Position",
+             "estimate_slope.1" = "Erosion (cm/yr)",
+             "m_error_slope.1" = "Error (+/-)",
+             "p.value_slope.1" = "p-value",
+             "estimate_slope.2" = "Erosion (cm/yr)",
+             "m_error_slope.2" = "Error (+/-)",
+             "p.value_slope.2" = "p-value",
+             "estimate_slope.3" = "Erosion (cm/yr)",
+             "m_error_slope.3" = "Error (+/-)",
+             "p.value_slope.3" = "p-value",
+             "estimate_slope.4" = "Erosion (cm/yr)",
+             "m_error_slope.4" = "Error (+/-)",
+             "p.value_slope.4" = "p-value",
+             "estimate_slope.5" = "Erosion (cm/yr)",
+             "m_error_slope.5" = "Error (+/-)",
+             "p.value_slope.5" = "p-value"))
+
+ft 
+
+
+```
