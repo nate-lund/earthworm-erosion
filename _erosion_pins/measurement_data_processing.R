@@ -118,9 +118,9 @@ pin.p <- output.qc %>%
 
 
 # Generate list of forests and slope positions for analysis
-#forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ", "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")
+forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ", "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")
 #forests <- c("ASH")
-forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ")
+#forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ")
 nforests <- length(forests)
 
 hill.poses <- c("BS", "FS")
@@ -253,9 +253,9 @@ for (i in 1:(nforests * 2)){
 }
 
 # Visualize data
-datatable(pin.ls)
+#datatable(pin.ls)
+#datatable(coefs.list)
 
-datatable(coefs.list)
 
 ##================================ H3 mm-Periods ================================
 
@@ -297,7 +297,7 @@ print(slopes.only, n = 27)
 #datatable(slopes.only)
 
 # filter for slope & margin of error (cm/day) & p-value
-final.table <- coefs.wide %>% 
+H3_final_table <- coefs.wide %>% 
   select(forest,
          slope_pos,
          estimate_slope.1,
@@ -316,15 +316,17 @@ final.table <- coefs.wide %>%
          m_error_slope.5,
          p.value_slope.5) %>%
   arrange(forest, slope_pos)
-print(final.table, n = 27)
+print(H3_final_table, n = 27)
 
-write_xlsx(final.table, hert("_analysis/H3_mm-over-time.xlsx"))
+write_xlsx(H3_final_table, hert("_analysis/H3_final_table.xlsx"))
 
 
 
-##================================ H2 Overall Erosion  ================================
+##================================ H2 FS v BS  ================================
 
 pin.ls <- pin.ls
+
+#' [Calcualte net change over the whole study period]
 
 # Select only first and last mms
 final.pins <- pin.ls %>%
@@ -347,17 +349,11 @@ last.mm <- final.pins %>%
 # Compute average of final measurements for each forest and slope pos 
 net.erosion <- last.mm %>%
   group_by(forest, slope_pos) %>% 
-  summarise(net_change = mean(mm),
-            net_rate = mean(mm/dt)) %>% 
+  summarise(net_change = mean(mm)) %>% 
   arrange(forest, slope_pos)
 
-# Data table of total erosion, and average erosion rate over the period
-print(net.erosion, n = 26)
 
-
-##================================ H2 Overall Sig Tests ================================
-
-pin.ls <- pin.ls
+#' [Calculate rate of change over the whole study period - with signifigance]
 
 # Select only first non-zero mm and last mm
 second.last <- pin.ls %>%
@@ -370,81 +366,91 @@ second.last <- pin.ls %>%
   filter(first_last != 0) %>% 
   group_by(pin) %>% 
   mutate(dt = max(dayof) - min(dayof))
-head(second.last)
 
 
-#' [Below is a number of for loops etc. to fit models to all the different forests and slope positions]
-
-plots <- vector(mode = "list", length = nforests)
-second.last <- second.last
-
-# Divide up data 
-# Create empty list, 2x for hill slope positions
-pin.list <- vector(mode = "list",length = nforests * 2) 
-
-# for loop to split by forest for BS
-for(i in 1:nforests) { 
-  pin.list[[i]] <- second.last %>% filter(forest == forests[i] & slope_pos == hill.poses[1])
-}
-
-# for loop to split by forest for FS
-for(i in 1:nforests) { 
-  pin.list[[i + nforests]] <- second.last %>% filter(forest == forests[i] & slope_pos == hill.poses[2])
-}
-
+# Divide up data
 # Create a list to hold plots
+plots <- vector(mode = "list", length = nforests)
+
+# Create empty list, 2x for hill slope positions
+pin.list <- vector(mode = "list",length = nforests)
+# for loop to split by forest for BS
+for(i in 1:nforests) {
+  pin.list[[i]] <- second.last %>% filter(forest == forests[i])
+}
+
+
+
 
 # Fit lm's to each and plot
 for (i in 1:(nforests)){
-  
+
   # Fit lm
-  lm.t <- lm(data = pin.list[[i]], mm ~ dayof)
-  
+  lm.t <- lm(data = pin.list[[i]], mm ~ dayof * slope_pos - 1) # effects coding for model
+
   # Save coefficients
   coefs.t <- tidy(lm.t)
   coefs.t$forest = unique(pin.list[[i]]$forest)
-  coefs.t$slope_pos = unique(pin.list[[i]]$slope_pos)
-  
+
   ifelse(i == 1,
          lm.coefs <- coefs.t,
          lm.coefs <- merge(lm.coefs, coefs.t, all = TRUE)) # merge data frames
 
-  # Create plots
-  title <- paste(unique(pin.list[[i]]$forest),unique(pin.list[[i]]$slope_pos), sep = "-")
-  
-  b <- ggplot(data = pin.list[[i]], mapping = aes(x = date, y = mm, group = date)) +
-    geom_boxplot() +
-    geom_jitter(width = 8) +
-    ggtitle(label = title)
-  
-  plots[[i]] = b
-  
   }
 
-# Grab 
-lm.coefs <- lm.coefs %>% 
-  mutalte
 
-# Trim intercepts from
-coefs.clean <- lm.coefs %>% 
-  filter(term != "(Intercept)") %>% 
-  arrange(forest, slope_pos) %>% 
-  select(forest, slope_pos, estimate, std.error, p.value)
+# Trim dataset
+H2_final_table <- lm.coefs %>% 
+  arrange(forest) %>% 
+  filter(term == "dayof" | term == "dayof:slope_posFS") %>% 
+  mutate(estimate = round((estimate * 365 / 10), digits = 3),
+         std.error = round((std.error), digits = 3),
+         p.value = round((p.value), digits = 5)) %>% 
+  select(forest, term, estimate, std.error, p.value) %>% 
+  pivot_wider(
+    id_cols = forest,
+    names_from = term,
+    values_from = c(estimate, std.error, p.value)
+  ) %>% 
+  rename(slope_bs = "estimate_dayof",
+         SE_bs = "std.error_dayof",
+         p_bs = "p.value_dayof",
+         dslope_fs = "estimate_dayof:slope_posFS",
+         SE_fs = "std.error_dayof:slope_posFS",
+         p_fs = "p.value_dayof:slope_posFS")
 
 
+write_xlsx(H2_final_table, hert("_analysis/H2_final_table.xlsx"))
 
-plot_grid(plotlist = plots[1:12],
-          ncol = 3) # plot BS plots
-
-plot_grid(plotlist = plots[7:12],
-          ncol = 3) # plot FS plots
 
 #================================ Pub Tables ================================
 
 ##================================ H3 ================================
 
+# Run ONE Of the two following chunks to select the dataset to put in table
+# For ARB and LR
+H3_final_table.df <- H3_final_table %>% 
+  filter(forest == "ASH" |
+           forest == "LRE" |
+           forest == "LRW" |
+           forest == "MAG" |
+           forest == "WD" |
+           forest == "LRJ")
+
+# For Par-Sci
+H3_final_table.df <- H3_final_table %>% 
+  filter(forest == "RCE" |
+           forest == "LME" |
+           forest == "IH" |
+           forest == "RCJ" |
+           forest == "LMJ" |
+           forest == "NH" |
+           forest == "PLH")
+
+
+
 # Add data and format table
-H3_mm_over_time.ft <- flextable(final.table,
+H3_mm_over_time.ft <- flextable(H3_final_table.df,
                 col_keys = c("forest",
                              "slope_pos",
                              "blank",
@@ -549,6 +555,56 @@ H3_mm_over_time.ft <- H3_mm_over_time.ft %>% labelizor(
 
 H3_mm_over_time.ft
 
+##================================ H2 ================================
+
+H2_mm_over_time.ft <- flextable(H2_final_table,
+                                col_keys = c("forest",
+                                             "slope_bs",
+                                             "dslope_fs",
+                                             "blank",
+                                             "SE_bs",
+                                             "SE_fs"
+                                             )) %>% 
+  empty_blanks() %>%
+  
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  
+  align(align = "center", part = "all") %>% 
+  valign(valign = "center", part = "header") %>% 
+  
+  padding(part = "all", padding = 3) %>% 
+  
+  add_footer_lines("* Indicates signifgance to p < 0.05. Estimates for the backslope are evaluate as signifigantly different than zero. Estimates for the footslope are evaluated as signifigantly different than the backslope.")
+
+
+# * all significant values
+H2_mm_over_time.ft <- H2_mm_over_time.ft %>% 
+  mk_par(j = "slope_bs",
+         i = ~ p_bs < 0.05,
+         value = as_paragraph(
+           slope_bs,
+           "*"
+         )) %>% 
+  mk_par(j = "dslope_fs",
+         i = ~ p_fs < 0.05,
+         value = as_paragraph(
+           dslope_fs,
+           "*"
+         ))
+
+
+H2_mm_over_time.ft <- H2_mm_over_time.ft %>% labelizor(
+  part = "header", 
+  labels = c("forest" = "Site",
+             "slope_bs" = "BS Slope (cm/yr)",
+             "dslope_fs" = "FS Slope (Δ cm/yr)",
+             "SE_bs" = "BS SE",
+             "SE_fs" = "FS SE"
+  ))
+
+
+H2_mm_over_time.ft
 
 #================================ Plotting ================================
 
@@ -729,7 +785,57 @@ plot_grid(ncol = 4, nrow = 4,
 
 
 
+# plot_grid(plotlist = plots[1:6],
+#           ncol = 3) # plot BS plots
+# 
+# plot_grid(plotlist = plots[7:12],
+#           ncol = 3) # plot FS plots
 
+
+
+#' Divide up data  [this is old, fits a seperate model to each]
+# # Create a list to hold plots
+# plots <- vector(mode = "list", length = nforests * 2)
+# 
+# # Create empty list, 2x for hill slope positions
+# pin.list <- vector(mode = "list",length = nforests * 2) 
+# # for loop to split by forest for BS
+# for(i in 1:nforests) { 
+#   pin.list[[i]] <- second.last %>% filter(forest == forests[i] & slope_pos == hill.poses[1])
+# }
+# # for loop to split by forest for FS
+# for(i in 1:nforests) { 
+#   pin.list[[i + nforests]] <- second.last %>% filter(forest == forests[i] & slope_pos == hill.poses[2])
+# }
+#
+#
+#
+# # Fit lm's to each and plot
+# for (i in 1:(nforests * 2)){
+#   
+#   # Fit lm
+#   lm.t <- lm(data = pin.list[[i]], mm ~ dayof)
+#   
+#   # Save coefficients
+#   coefs.t <- tidy(lm.t)
+#   coefs.t$forest = unique(pin.list[[i]]$forest)
+#   coefs.t$slope_pos = unique(pin.list[[i]]$slope_pos)
+#   
+#   ifelse(i == 1,
+#          lm.coefs <- coefs.t,
+#          lm.coefs <- merge(lm.coefs, coefs.t, all = TRUE)) # merge data frames
+# 
+#   # Create plots
+#   title <- paste(unique(pin.list[[i]]$forest),unique(pin.list[[i]]$slope_pos), sep = "-")
+#   
+#   b <- ggplot(data = pin.list[[i]], mapping = aes(x = date, y = mm, group = date)) +
+#     geom_boxplot() +
+#     geom_jitter(width = 8) +
+#     ggtitle(label = title)
+#   
+#   plots[[i]] = b
+#   
+#   }
 # create significance table
 sig.table <- coefs.list %>% 
   mutate(term = case_when(
