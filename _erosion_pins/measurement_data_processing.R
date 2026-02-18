@@ -127,7 +127,7 @@ hill.poses <- c("BS", "FS")
 npos = length(hill.poses)
 
 
-##================================ Calculating Precip ================================
+##================================ Compute Precip ================================
 
 head(as_tibble(pin.p))
 
@@ -427,7 +427,7 @@ write_xlsx(H2_final_table, hert("_analysis/H2_final_table.xlsx"))
 
 ##================================ H3 ================================
 
-# Run ONE Of the two following chunks to select the dataset to put in table
+# Run ONE Of the two following chunks to select the datasets to put in table
 # For ARB and LR
 H3_final_table.df <- H3_final_table %>% 
   filter(forest == "ASH" |
@@ -608,74 +608,167 @@ H2_mm_over_time.ft
 
 #================================ Plotting ================================
 
-##================================ Pin by Precip ================================
+##================================ H3 ARB-LR ================================
 
-filter.pin.ls <- pin.ls %>% filter(forest != "IH")
+datatable(plotings)
 
-# WIP plot dmdt / precip
-ggplot(data = filter.pin.ls, mapping = aes(y = dmm, x = period.sum, linetype = forest)) +
-  geom_jitter(aes(color = forest)) +
-  geom_smooth(method = "lm", se = TRUE) +
-  facet_wrap(~worms, ncol = 1)
-
-##================================ Pin by Date lapply ================================
-
-# split
-forest.list <- vector(mode = "list", length = nforests) # create empty list
-for(i in 1:nforests) { # for loop to split
-  forest.list[[i]] <- pin.ls %>% filter(forest == forests[i])
-}
+# Run ONE Of the two following chunks to select the datasets to put in table
+# For ARB and LR
+plotings <- pin.ls %>% 
+  filter(forest == "ASH" |
+           forest == "LRE" |
+           forest == "LRW" |
+           forest == "MAG" |
+           forest == "WD" |
+           forest == "LRJ")
 
 
-# create plots, one for each forest, and store them in a list
-pins.plots <- lapply(forest.list, function(df) {
-  forest_name <- unique(df$forest)
-  title_text <- if_else(length(forest_name) == 1, forest_name, paste(forest_name, collapse = ", "))
-
-  a <- ggplot(data = df, mapping = aes(x = date, y = mm)) +
-    
-    geom_line(aes(group = pin,
-                  color =  slope_pos)) +
-    
-    geom_boxplot(aes(group = forest_date,
-                     width = 3,
-                     fill = slope_pos)) +
-    
-    geom_line(data = df,
-              aes(x = date,
-                  y = lspline,
-                  linetype = slope_pos)) +
+ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
   
-    # Visuals
-    #scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
-    scale_x_date(limits = c(ymd("2025-07-10"), ymd("2025-10-01"))) +
-    geom_hline(yintercept = 0) +
-    theme(axis.title.x = element_blank()) +
-    ggtitle(label = title_text) +
-    theme(legend.position = "none",
-          panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank(),
-          panel.background = element_blank()) 
+  geom_line(aes(group = pin,
+                color =  slope_pos),
+            linetype = 1) +
   
-  return(a)
-})
+  geom_boxplot(aes(group = forest_date,
+                   width = 3,
+                   fill = slope_pos)) +
+  
+  geom_line(data = plotings,
+            aes(x = date,
+                y = lspline,
+                linetype = slope_pos),
+            linewidth = 1) +
+  
+  facet_wrap(~forest, ncol = 3) + # For ARB / LR
+  
+  # Visuals
+  scale_color_manual(
+    name = "Slope Position",
+    values = c(
+      "FS" = "darkolivegreen3",
+      "BS" = "grey50"
+    )) +
+  
+  scale_fill_manual(
+    name = "Slope Position",
+    values = c(
+      "FS" = "darkolivegreen3",
+      "BS" = "grey50"
+    )) +
+  
+  scale_linetype_discrete(name = "Slope Position") +
+  
+  scale_y_continuous( 
+    limits = c(-20, 20),
+    name = "Adjusted height (mm)") + # May cut off some outliers, fine for visualization
+  scale_x_date(limits = c(ymd("2025-07-10"), ymd("2025-10-01")),
+               name = "Date",
+               date_breaks = "1 month", date_labels = "%b") + # Remove this section for Par-Sci
+  geom_hline(yintercept = 0, linewidth = 0.5) +
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_line(color = "white"),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        text = element_text(family = "Calibri"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        
+        strip.background = element_rect(
+          fill = "white",   # or any color
+          color = "white",  # border color
+          linewidth = 0.5
+        ),
+        
+        strip.text = element_text(
+          family = "Calibri",
+          #face = "oblique",
+          color = "black",
+          hjust = 0,   # left
+          vjust = 0  # vertical centering
+          
+        )
+        
+  ) 
 
+##================================ H3 Par-Sci ================================
 
-# get legend
-legend <- get_legend(
-  pins.plots[[1]] + theme(legend.position = "left")
-)
+# For Par-Sci
+plotings <- pin.ls %>% 
+  filter(forest == "RCE" |
+           forest == "LME" |
+           forest == "IH" |
+           forest == "RCJ" |
+           forest == "LMJ" |
+           forest == "NH" |
+           forest == "PLH")
 
-# plot arb & LR
-plot_grid(plotlist = pins.plots[1:6],
-          ncol = 3) # plot all plots
+ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
+  
+  geom_line(aes(group = pin,
+                color =  slope_pos),
+            linetype = 1) +
+  
+  geom_boxplot(aes(group = forest_date,
+                   width = 3,
+                   fill = slope_pos)) +
+  
+  geom_line(data = plotings,
+            aes(x = date,
+                y = lspline,
+                linetype = slope_pos),
+            linewidth = 1) +
+  
+#  facet_wrap(~forest, ncol = 3) + # For ARB / LR
+  facet_wrap(~forest, ncol = 3, scales = "free_x") +
 
-# plot par-sci
-plot_grid(plotlist = pins.plots[7:13],
-          ncol = 3) # plot all plots
+  # Visuals
+  scale_color_manual(
+    name = "Slope Position",
+    values = c(
+    "FS" = "darkolivegreen3",
+    "BS" = "grey50"
+  )) +
+  
+  scale_fill_manual(
+    name = "Slope Position",
+    values = c(
+    "FS" = "darkolivegreen3",
+    "BS" = "grey50"
+  )) +
+  
+  scale_linetype_discrete(name = "Slope Position") +
+  
+  scale_y_continuous( 
+    limits = c(-20, 20),
+    name = "Adjusted height (mm)") + # May cut off some outliers, fine for visualization
+  scale_x_date(name = "Date",
+               date_breaks = "1 month", date_labels = "%b %d") + # Remove this section for Par-Sci
+  geom_hline(yintercept = 0, linewidth = 0.5) +
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_line(color = "white"),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        text = element_text(family = "Calibri"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        
+        strip.background = element_rect(
+          fill = "white",   # or any color
+          color = "white",  # border color
+          linewidth = 0.5
+        ),
+        
+        strip.text = element_text(
+          family = "Calibri",
+          #face = "oblique",
+          color = "black",
+          hjust = 0,   # left
+          vjust = 0  # vertical centering
+          
+        )
+        
+  ) 
 
-
-pins.plots[6] # plot a single plot
 
 
 ##================================ Precip ================================
@@ -721,7 +814,11 @@ plot_grid(ncol = 1,
           plotlist = precip.plots) #plot all plots
 
 
-##================================ Pins & Precip side-by-side ================================
+
+
+
+#================================ OLD ================================
+
 
 pins.plots # pins
 precip.plots # precip
@@ -780,10 +877,89 @@ plot_grid(ncol = 4, nrow = 4,
 
 
 
+filter.pin.ls <- pin.ls %>% filter(forest != "IH")
 
-#================================ OLD ================================
+# WIP plot dmdt / precip
+ggplot(data = filter.pin.ls, mapping = aes(y = dmm, x = period.sum, linetype = forest)) +
+  geom_jitter(aes(color = forest)) +
+  geom_smooth(method = "lm", se = TRUE) +
+  facet_wrap(~worms, ncol = 1)
 
 
+# split
+forest.list <- vector(mode = "list", length = nforests) # create empty list
+for(i in 1:nforests) { # for loop to split
+  forest.list[[i]] <- pin.ls %>% filter(forest == forests[i])
+}
+
+
+# create plots, one for each forest, and store them in a list
+pins.plots <- lapply(forest.list, function(df) {
+  forest_name <- unique(df$forest)
+  title_text <- if_else(length(forest_name) == 1, forest_name, paste(forest_name, collapse = ", "))
+  
+  a <- ggplot(data = df, mapping = aes(x = date, y = mm)) +
+    
+    geom_line(aes(group = pin,
+                  color =  slope_pos)) +
+    
+    geom_boxplot(aes(group = forest_date,
+                     width = 3,
+                     fill = slope_pos)) +
+    
+    geom_line(data = df,
+              aes(x = date,
+                  y = lspline,
+                  linetype = slope_pos),
+              linewidth = 1) +
+    
+    # Visuals
+    
+    scale_color_manual(values = c(
+      "FS" = "khaki2",
+      "BS" = "firebrick4"
+    )) +
+    
+    scale_fill_manual(values = c(
+      "FS" = "khaki2",
+      "BS" = "firebrick4"
+    )) +
+    
+    scale_y_continuous(
+      limits = c(-20, 20),
+      name = "Adjusted height (mm)") + # cuts off some out liers, fine for visualization
+    scale_x_date(limits = c(ymd("2025-07-10"), ymd("2025-10-01"))) +
+    geom_hline(yintercept = 0, linewidth = 0.5) +
+    ggtitle(label = title_text) +
+    theme(axis.title.x = element_blank(),
+          legend.position = "none",
+          panel.grid.major.x = element_line(color = "white"),
+          panel.grid.major.y = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank(),
+          panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)
+    ) 
+  
+  return(a)
+})
+
+
+
+# get legend if wanted
+legend <- get_legend(
+  pins.plots[[1]] + theme(legend.position = "left")
+)
+
+# plot arb & LR
+plot_grid(plotlist = pins.plots[1:6],
+          ncol = 3) # plot all plots
+
+# plot par-sci
+plot_grid(plotlist = pins.plots[7:13],
+          ncol = 3) # plot all plots
+
+
+pins.plots[6] # plot a single plot
 
 # plot_grid(plotlist = plots[1:6],
 #           ncol = 3) # plot BS plots
