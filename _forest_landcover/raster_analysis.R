@@ -1,7 +1,7 @@
-#'############################### [setup] ################################
+#================================ Setup ================================
 
 # libraries needed
-libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco", "rasterVis", "raster", "elevatr", "mapview", "leaflet", "tmap", "RColorBrewer", "exactextractr", "emmeans", "lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom")
+libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco", "rasterVis", "raster", "elevatr", "mapview", "leaflet", "tmap", "RColorBrewer", "exactextractr", "emmeans", "lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom", "flextable")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -22,7 +22,7 @@ hert <- function(file) {
   return(file_path)
 }
 
-#'############################### [Resources] ################################
+#================================ Resources ================================
 
 # Technical resources
 # sf manual: <https://cran.r-project.org/web/packages/sf/sf.pdf>
@@ -34,34 +34,35 @@ hert <- function(file) {
 
 # Elevation, slope, and curvature can be extracted from Minnesota LiDAR data found at MNTopo (<http://arcgis.dnr.state.mn.us/maps/mntopo/>). The raw LiDAR data can be downloaded directly from the website. LiDAR data is in NAD83 w/ elevation in meters.
 
-#'############################### [importing spatial data] ################################
-#  ----
+
+#================================ Import Data  ================================
+
 # import rasters
 dem <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_USGS30m_DEM_r")
 slope <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_USGS30m_slope_r")
 rusle2 <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_RUSLE2_30m_raster_r")
 landcover <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_LandCover_30m_2020_raster")
 
-#' [temporary change to make data processing faster]
-ext <- ext(landcover)
-xmin <- ext[1]; xmax <- ext[2]
-ymin <- ext[3]; ymax <- ext[4]
-
-new_ext <- ext(1100000, 1200000,
-             5150000, 5200000)
-
-landcover <- crop(landcover, new_ext, snap = "out")
-
-landcover <- classify(landcover, cbind(255, 0)) # remove weird 255 land cover classes made by cropping
-
-plot(landcover)
+#' #' [subset landcover for QAQC]
+#' ext <- ext(landcover)
+#' xmin <- ext[1]; xmax <- ext[2]
+#' ymin <- ext[3]; ymax <- ext[4]
+#' 
+#' new_ext <- ext(1100000, 1200000,
+#'              5150000, 5200000)
+#' 
+#' landcover <- crop(landcover, new_ext, snap = "out")
+#' 
+#' landcover <- classify(landcover, cbind(255, 0)) # remove weird 255 land cover classes made by cropping
+#' 
+#' plot(landcover)
 
 # import feature classes
 huc12 <- vect(hert("_spatial/Great_Lakes_datasets.gdb"), layer = "GL_HUC12")
 states <- vect(hert("_spatial/Great_Lakes_datasets.gdb"), layer = "GL_state_boundaries")
 
 
-#'############################### [data cleanup] ################################
+#================================ Cleanup Data ================================
 
 #' reproject, resample, and trim extent to match [landcover]
 slope <- project(slope, landcover) %>% # reproject slope to match landcover
@@ -105,9 +106,10 @@ huc12.84 <- st_as_sf(huc12) %>% st_transform(crs = 4326)
 states.sf <- st_as_sf(states)
 states.84 <- st_as_sf(states) %>% st_transform(crs = 4326)
 
-#'############################### [rusle2 per land cover] ################################
-# Section 1 -------------------
 
+#================================ RUSLE2 ================================
+
+##================================ Summary Stats ================================
 
 
 # input the raster needed for statics here
@@ -145,51 +147,10 @@ write.csv(zonal.stats, hert("_analysis/rusle2-landcover-stats.csv")) # export to
 
 
 
-#' [TERRA][histograms] ---------------------------------------------------------------
-# generate histograms for each landcover ----
 
-# define rusle2 bins
-start = -1 # start of bins
-end = 10 # end of bins
-width = .1 # bin spacing
+#================================ Slope ================================
 
-# create a matrix of the bin distributions
-bins <- data.frame(A = seq(from = start, to = end - width, by = width),
-                   B = seq(from = start - -width, to = end, by = width), #check the sign in "from"
-                   "bin" = seq(from = start, to = end - width, by = width))
-slope.bins <- as.matrix(bins)
-
-
-slope.binned <- classify(raster.in, slope.bins) # apply bins to slope raster
-
-# tabulate area - how many unique combinations are there, and how many cells are in each?
-stack <- c(landcover, slope.binned) # stack land cover and binned slope raseters
-stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
-
-stack.area.t <- stack.area %>%
-  drop_na() %>% 
-  group_by(land_cover) %>% 
-  mutate(nsum = sum(n)) %>% 
-  ungroup() %>% 
-  mutate(frac = n / nsum)
-
-
-# plot bins for each land cover
-ggplot(data = stack.area.t, mapping = aes(y = frac, x = GL_RUSLE2_30m_raster_r)) +
-  geom_col() +
-  scale_x_continuous(limits = c(-1, 10)) +
-  facet_wrap(~land_cover, ncol = 2, scales = "free_y") +
-  geom_vline(xintercept = -0.534) # mean of... cropland
-
-
-# export
-write.csv(stack.area, hert("_analysis/rusle2-landcover-hist.csv")) # export df to plot later
-
-
-
-
-
-#'############################### [slope per land cover] ################################
+##================================ Summary Stats ================================
 
 # input the raster needed for statics here
 landcover <- landcover # landcover is also needed
@@ -227,51 +188,7 @@ write.csv(zonal.stats, hert("_analysis/slope-landcover-stats.csv")) # export to 
 
 
 
-
-#' [TERRA][histograms] ---------------------------------------------------------------
-# generate histograms for each landcover
-
-# define slope bins
-start = 0 # start of bins
-end = 100 # end of bins
-width = 1 # bin spacing
-
-# create a matrix of the bin distributions
-bins <- data.frame(A = seq(from = start, to = end - width, by = width),
-                     B = seq(from = start - -width, to = end, by = width), #check the sign in "from"
-                     "bin" = seq(from = start, to = end - width, by = width))
-slope.bins <- as.matrix(bins)
-
-
-slope.binned <- classify(raster.in, slope.bins) # apply bins to slope raster
-
-# tabulate area - how many unique combinations are there, and how many cells are in each?
-stack <- c(landcover, slope.binned) # stack land cover and binned slope raseters
-stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
-
-stack.area.t <- stack.area %>%
-  drop_na() %>% 
-  group_by(land_cover) %>% 
-  mutate(nsum = sum(n)) %>% 
-  ungroup() %>% 
-  mutate(frac = n / nsum)
-
-
-# plot bins for each land cover
-ggplot(data = stack.area.t, mapping = aes(y = frac, x = GL_USGS30m_slope_r)) +
-  geom_col() +
-  scale_x_continuous(limits = c(0, 50)) +
-  facet_wrap(~land_cover, ncol = 2, scales = "free_y") +
-  geom_vline(xintercept = -0.534) # mean of... cropland
-
-
-# export
-write.csv(stack.area, hert("_analysis/slope-landcover-hist.csv")) # export df to plot later
-
-
-#' [TERRA][slope bins table] ---------------------------------------------------------------
-# generate tables and  for each landcover
-
+##================================ Binned Slope Table ================================
 
 # define slope bins & create a maxtrix of the bin distribtions
 bins <- data.frame(A = c(0, 2, 5, 15, 30, 50), # "left" bin side
@@ -287,7 +204,6 @@ slope.cats <- data.frame(
   slope_class = c("0 - 2", "02  - 5", "05 - 15", "15 - 30", "30 - 50", "50 - 100")
 )
 levels(slope.binned) <- slope.cats # Associate the data frame with the raster
-
 
 
 # tabulate area - how many unique combinations are there, and how many cells are in each?
@@ -320,6 +236,202 @@ ggplot(data = stack.sum, mapping = aes(y = frac, x = slope_class)) +
 
 
 
+
+
+
+
+#================================ Pub Tables ================================
+
+##================================ Slope ================================
+
+# Because of the computational intensity required for these datasets, 
+# we save data following computation and upload it here
+
+slope_stats_df <- read.csv(hert("_analysis/_save/slope-landcover-stats.csv"))
+slope_bins_df <- read.csv(hert("_analysis/_save/slope-landcover-bins.csv"))
+slope_bins_df <- slope_bins_df %>% # Rename landcover to be same as in first df
+  rename(landcover = land_cover)
+
+# Join dataframes
+slope_all <- left_join(slope_stats_df, slope_bins_df, by = "landcover")
+
+# Clean up and rount stats
+slope_all_df <- slope_all %>% 
+  # Round
+  mutate(mean = round(mean, digits = 2),
+         median = round(median, digits = 2),
+         max = round(max, digits = 2),
+         min = round(min, digits = 2),
+         count = round(count * 30 / 1000000, digits = 0),
+         "02" = round(X0...2, digits = 2),
+         "05" = round(X02....5, digits = 2),
+         "15" = round(X05...15, digits = 2),
+         "30" = round(X15...30, digits = 2),
+         "50" = round(X30...50, digits = 2),
+         "100" = round(X50...100, digits = 2)
+                  ) %>% 
+  select(-X.y, -X0...2, -X02....5, -X05...15, -X15...30, -X30...50, -X50...100) %>% 
+  
+  # Rename landcover classes
+  filter(landcover != is.na(landcover) &
+         landcover != "18 Water") %>% 
+  mutate(landcover = case_when(
+    landcover == "1 Temperate or Subpolar Needleaf Forest" ~ "Temperate or Subpolar Needleaf Forest",
+    landcover == "5 Temperate or Subpolar Broadleaf Deciduous Forest" ~ "Temperate or Subpolar Broadleaf Deciduous Forest",
+    landcover == "6 Mixed Forest" ~ "Mixed Forest",
+    landcover == "8 Temperate or Subpolar Shrubland" ~ "Temperate or Subpolar Shrubland",
+    landcover == "10 Temperate or Subpolar Grassland" ~ "Temperate or Subpolar Grassland",
+    landcover == "14 Wetland" ~ "Wetland",
+    landcover == "15 Cropland" ~ "Cropland",
+    landcover == "16 Barren Land" ~ "Barren Land",
+    landcover == "17 Urban and Built-up" ~ "Urban and Built-up",
+    landcover == "18 Water" ~ "Water"
+  )) %>% 
+  
+  arrange(desc(mean)) 
+
+
+
+
+
+# Add data and format table
+slope_stats_df.ft <- flextable(slope_all_df,
+                                col_keys = c("landcover",
+                                             "blank",
+                                             "count",
+                                             "mean",
+                                             "median",
+                                             "blank2",
+                                             "02",
+                                             "05",
+                                             "15",
+                                             "30",
+                                             "50",
+                                             "100"
+                                )) %>% 
+  empty_blanks() %>%
+  
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  
+  align(align = "center", part = "all") %>%
+  valign(valign = "center", part = "header") %>% 
+  
+  align(align = "left", j = "landcover") %>% 
+  
+  width(j = c("count",
+              "mean",
+              "median",
+              "02",
+              "05",
+              "15",
+              "30",
+              "50",
+              "100"), width = 1) %>% 
+  width(j = "landcover", width = 3) %>% 
+  
+  bold(i = ~ landcover == "Temperate or Subpolar Broadleaf Deciduous Forest" |
+         landcover == "Mixed Forest")
+
+
+slope_stats_df.ft <- slope_stats_df.ft %>% 
+  add_header_row(values = c("",
+                            "Summary Stats",
+                            "Slope Distribution (%)"),
+                 colwidths = c(2, # adds up to total number of cols
+                               4,
+                               6
+                               ))
+
+# Add percent signs to all slope values
+slope_stats_df.ft <- slope_stats_df.ft %>%
+  set_formatter(
+    `02`  = function(x) paste0(x, "%"),
+    `05`  = function(x) paste0(x, "%"),
+    `15`  = function(x) paste0(x, "%"),
+    `30`  = function(x) paste0(x, "%"),
+    `50`  = function(x) paste0(x, "%"),
+    `100` = function(x) paste0(x, "%")
+  )
+
+
+slope_stats_df.ft <- slope_stats_df.ft %>% labelizor(
+  part = "header", 
+  labels = c("landcover" = "Landcover",
+             "count" = "Area (km^2)",
+             "mean" = "Mean (%)",
+             "median" = "Median (%)",
+             "02" = "0 - 2%",
+             "05" = "2 - 5%",
+             "15" = "5 - 15%",
+             "30" = "15 - 30%",
+             "50" = "30 - 50%",
+             "100" = "50 - 100%"
+  ))
+
+slope_stats_df.ft
+
+
+
+
+
+##================================ RUSLE2 ================================
+
+rulse2_stats_df <- read.csv(hert("_analysis/_save/rusle2-landcover-stats.csv"))
+
+
+
+
+
+
+
+
+
+
+#================================ Archive ================================
+
+
+#Histograms 
+
+
+# define slope bins
+start = 0 # start of bins
+end = 100 # end of bins
+width = 1 # bin spacing
+
+# create a matrix of the bin distributions
+bins <- data.frame(A = seq(from = start, to = end - width, by = width),
+                   B = seq(from = start - -width, to = end, by = width), #check the sign in "from"
+                   "bin" = seq(from = start, to = end - width, by = width))
+slope.bins <- as.matrix(bins)
+
+
+slope.binned <- classify(raster.in, slope.bins) # apply bins to slope raster
+
+# tabulate area - how many unique combinations are there, and how many cells are in each?
+stack <- c(landcover, slope.binned) # stack land cover and binned slope raseters
+stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
+
+stack.area.t <- stack.area %>%
+  drop_na() %>% 
+  group_by(land_cover) %>% 
+  mutate(nsum = sum(n)) %>% 
+  ungroup() %>% 
+  mutate(frac = n / nsum)
+
+
+# plot bins for each land cover
+ggplot(data = stack.area.t, mapping = aes(y = frac, x = GL_USGS30m_slope_r)) +
+  geom_col() +
+  scale_x_continuous(limits = c(0, 50)) +
+  facet_wrap(~land_cover, ncol = 2, scales = "free_y") +
+  geom_vline(xintercept = -0.534) # mean of... cropland
+
+
+# export
+write.csv(stack.area, hert("_analysis/slope-landcover-hist.csv")) # export df to plot later
+
+
 #' [TERRA / LEAFLET][plotting / visualization] ---------------------------------------------------------------
 # for slope. this can be run after either the histogram or table chunk above
 
@@ -341,7 +453,7 @@ alpha.values <- scales::rescale(slope.values, to = c(0.2, 1.0)) # Scale from 0.2
 # alpha.values <- (slope.values - min(slope.values, na.rm = TRUE)) /
 #   (max(slope.values, na.rm = TRUE) - min(slope.values, na.rm = TRUE)) # idk if this is needed
 
-#--------------------
+
 
 r = slope.sample
 values = values(slope.sample)
@@ -352,7 +464,7 @@ color_vector <- pal_func(values(r))
 
 
 
-#---------------------
+
 
 # create color pallets
 pal <- colorFactor(palette = landcover.colors,
@@ -727,4 +839,53 @@ ggplot(data = arb_dem_map) +
   labs(title = "Digital Elevation Model", fill = "Elevation") +
   coord_equal() +
   theme_minimal()
+
+
+
+
+
+
+
+#' [TERRA][histograms] ---------------------------------------------------------------
+
+# define rusle2 bins
+start = -1 # start of bins
+end = 10 # end of bins
+width = .1 # bin spacing
+
+# create a matrix of the bin distributions
+bins <- data.frame(A = seq(from = start, to = end - width, by = width),
+                   B = seq(from = start - -width, to = end, by = width), #check the sign in "from"
+                   "bin" = seq(from = start, to = end - width, by = width))
+slope.bins <- as.matrix(bins)
+
+
+slope.binned <- classify(raster.in, slope.bins) # apply bins to slope raster
+
+# tabulate area - how many unique combinations are there, and how many cells are in each?
+stack <- c(landcover, slope.binned) # stack land cover and binned slope raseters
+stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
+
+stack.area.t <- stack.area %>%
+  drop_na() %>% 
+  group_by(land_cover) %>% 
+  mutate(nsum = sum(n)) %>% 
+  ungroup() %>% 
+  mutate(frac = n / nsum)
+
+
+# plot bins for each land cover
+ggplot(data = stack.area.t, mapping = aes(y = frac, x = GL_RUSLE2_30m_raster_r)) +
+  geom_col() +
+  scale_x_continuous(limits = c(-1, 10)) +
+  facet_wrap(~land_cover, ncol = 2, scales = "free_y") +
+  geom_vline(xintercept = -0.534) # mean of... cropland
+
+
+# export
+write.csv(stack.area, hert("_analysis/rusle2-landcover-hist.csv")) # export df to plot later
+
+
+
+
 

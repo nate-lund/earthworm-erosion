@@ -1,7 +1,7 @@
-#'############################### [setup] ################################
+#================================ Setup ================================
 
 # libraries needed
-libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom")
+libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom", "DT", "flextable")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -22,7 +22,9 @@ hert <- function(file) {
   return(file_path)
 }
 
-#'############################### [start / prepping df] ################################
+
+#================================ Pre-processing data ================================
+##================================ Input & Prep Data ================================
 
 # Pull in the data from box and some pre-processing.
 input.a <- read_excel(hert("working_measurements-data.xlsx"), sheet = "2025_ARB-LR") # ARB and LR data
@@ -56,7 +58,7 @@ input <- input %>%
 # write to an excel file to be used later
 write_xlsx(input, hert("_analysis/input.xlsx"))
 
-#'############################### [differencing pins] ################################
+##================================ Differencing Pins ================================
 
 # number of unique pins
 nindex <- length(unique(input$index))
@@ -89,11 +91,7 @@ for(i in 2:nlist) { # for loop to stack dataframes one list at a time
   output <- merge(output, input_list[[i]], all = TRUE)
 } 
 
-# write to an excel file
-write_xlsx(output, hert("_analysis/output.xlsx"))
-
-
-#'############################### [QAQC] ################################
+##================================ Clean up ================================
 
 # clean up data
 output.qc <- output %>%
@@ -105,36 +103,31 @@ output.qc$forest <- factor(output$forest,
                         levels=c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ",
                                  "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")) # need to give it forests here
 
-
-write_xlsx(output, hert("_analysis/output_qc.xlsx"))
-
-
-#'############################### [stats - pins] ################################
-
-#' The goal here is to dig  into pin-specific and measurement to measurement trends. Here we plot the pins as lines, show the boxplots of thoses measurements, and fit a cubic spline. Below is a linear spline (which I think is more realistic since erosion is largely storm based). 
-
-#' I would like to plot based on cumulative precipitation (thinking between each time period), see if there is a relationship between percip and slope [WIP].
-  #' How much does precip impact the elevation of the forest as a whole versus pin specific.
-  #' Is there a tighter relationship between erosion and precipitation in EW vs JW? Across all sites?
-
-#' Could I also look at pins that experience only deposition? only erosion?
-
-#' also consider doing abs splines / analysis
-
-#' what if, I calcualted the erosion rate for every pin (easy), then I compared that to cumulate precip at that point. then, I do a scatter plot with precip on the x-axis and erosion on the y-axis. then fit a lm to the JW and to the EW data.
-
-# create some needed columns and sort / remove uneeded ones
+# create some needed columns and sort / remove unneeded ones
 pin.p <- output.qc %>% 
-  mutate(pin = (paste(forest, transect, slope_pos, pin_ID, sep = "_"))) %>% # unique id for each pin
-  mutate(forest_date = interaction(forest, date, sep = "_")) %>% # combines  forest at each date
+  mutate(pin = (paste(forest,
+                      transect,
+                      slope_pos,
+                      pin_ID,
+                      sep = "_"))) %>% # unique id for each pin
+  mutate(forest_date = interaction(forest,
+                                   date,
+                                   slope_pos,
+                                   sep = "_")) %>% # combines  forest at each date
   select(date, dayof, site, forest, transect, slope_pos, pin_ID, mm, amm, worms, id, pin, forest_date, dmm, dmdt)
 
 
-# prep values
+# Generate list of forests and slope positions for analysis
 forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ", "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")
+#forests <- c("ASH")
+#forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ")
 nforests <- length(forests)
 
-#'############################### [calculating cumulative precipitation] ################################
+hill.poses <- c("BS", "FS")
+npos = length(hill.poses)
+
+
+##================================ Compute Precip ================================
 
 head(as_tibble(pin.p))
 
@@ -167,7 +160,9 @@ precip.RHN <- precip.list[5]
 precip.RHS <- precip.list[6]
 
 
-#' [input precip data into the measurement dataframe]
+
+##================================ Merge Pin and Precip ================================
+# Input precip data into the measurement data frame
 
 # need to split dataframe for calculations, etc
 pin.forests <- vector(mode = "list", length = nforests) # create empty list, nforests defined above
@@ -207,22 +202,32 @@ for(i in 1:nforests) {
 
 }
 
-write_xlsx(pin.p2, hert("_analysis/pins-with-precip.xlsx"))
+write_xlsx(pin.p2, hert("_analysis/post-procesed-pre-analysis.xlsx"))
 
 
-#'############################### [fitting linear splines, elevation / date] ################################
+#================================ Statistics ================================
+##================================ Fitting lsplines ================================
+# Fitting linear splines, elevation by date, spline for each forest and hill slope position.
 
-# split our master df (pin.t) into different data frames in a list by forest, as these all had measurements taken on the same date (for knots)
+pin.p2 <- pin.p2
 
-pin.list <- vector(mode = "list", length = nforests) # create empty list
+#' [Divide up data]  
+# create empty list, 2x for hill slope positions
+pin.list <- vector(mode = "list",length = nforests * 2) 
 
-for(i in 1:nforests) { # for loop to split
-  pin.list[[i]] <- pin.p2 %>% filter(forest == forests[i])
+# for loop to split by forest for BS
+for(i in 1:nforests) { 
+  pin.list[[i]] <- pin.p2 %>% filter(forest == forests[i] & slope_pos == hill.poses[1])
+}
+
+# for loop to split by forest for FS
+for(i in 1:nforests) { 
+  pin.list[[i + nforests]] <- pin.p2 %>% filter(forest == forests[i] & slope_pos == hill.poses[2])
 }
 
 
-# fit lsplines and generated predicted values
-for (i in 1:nforests){
+#' [fit lsplines and generated predicted values]
+for (i in 1:(nforests * 2)){
   # fit lspline
   dates <- unique(pin.list[[i]]$dayof)[2:(length(unique(pin.list[[i]]$dayof))-1)] # knots at here, excludes first date
   
@@ -234,22 +239,34 @@ for (i in 1:nforests){
          pin.ls <- merge(pin.ls, pin.list[[i]], all = TRUE)) # merge data frames
   
   # save coefficients
-  coefs.t <- tidy(pin.lspline)
-  coefs.t$forest = forests[i]
+  coefs.t <- tidy(pin.lspline) # estimate, std.error, statistic, p.value
+  inter <- data.frame(confint(pin.lspline)) %>%   # grab margin of errors
+    mutate(m_error = (X97.5.. - X2.5..) / 2)
+  coefs.t$m_error = inter$m_error # combine estimates with margin
+  
+  coefs.t$forest = unique(pin.list[[i]]$forest)
+  coefs.t$slope_pos = unique(pin.list[[i]]$slope_pos)
   
   ifelse(i == 1,
          coefs.list <- coefs.t,
          coefs.list <- merge(coefs.list, coefs.t, all = TRUE)) # merge data frames
-  }
+}
 
-write_xlsx(pin.ls, hert("_analysis/pins-with-lspline.xlsx"))
+# Visualize data
+#datatable(pin.ls)
+#datatable(coefs.list)
 
-write_xlsx(coefs.list, hert("_analysis/lsp_coefs.xlsx"))
 
+##================================ H3 mm-Periods ================================
 
-#'############################### [summary stats for lsplines] ################################
+# Using coeffecients from lspline fits
+coefs.list <- coefs.list
 
+# keep all statistics & pivot
 coefs.wide <- coefs.list %>%
+  mutate(estimate = round((estimate * 365 / 10), digits = 3)) %>% # compute erosion in cm/yr, round to 0.001 cm
+  mutate(m_error = round((m_error * 365 / 10), digits = 3)) %>% # compute margin in cm/yr , round to 0.001 cm
+  mutate(p.value = round(p.value, digits = 3)) %>% 
   mutate(term = case_when(
     term == "(Intercept)" ~ "intercept",
     term == "lspline(dayof, knots = dates)1" ~ "slope.1",
@@ -260,81 +277,501 @@ coefs.wide <- coefs.list %>%
   )) %>% 
   pivot_wider(
     names_from = term,
-    values_from = c(estimate, std.error, statistic, p.value)
+    values_from = c(estimate, std.error, statistic, p.value, m_error)
   )
-
-    
-write_xlsx(coefs.wide, hert("_analysis/lsp_coefs_wide.xlsx"))
-
-
-# calculate average erosion 
-coefs.sum <- coefs.longer %>% 
-  group_by(forest) %>% 
-  summarise(ave_slope = mean(slope, na.rm = TRUE)) %>% 
-  mutate("erosion (cm/yr)" = ave_slope * 365 / 10)
+head(coefs.wide)
+#datatable(coefs.wide)
 
 
-# WIP plot by period
-ggplot(data = coefs.list, mapping = aes(y = estimate, x = forest)) +
-  geom_boxplot()
+# filter for slope estimates (mm/day)
+slopes.only <- coefs.wide %>% 
+  select(forest,
+         slope_pos,
+         estimate_slope.1,
+         estimate_slope.2,
+         estimate_slope.3,
+         estimate_slope.4,
+         estimate_slope.5) %>%
+  arrange(forest, slope_pos)
+print(slopes.only, n = 27)
+#datatable(slopes.only)
+
+# filter for slope & margin of error (cm/day) & p-value
+H3_final_table <- coefs.wide %>% 
+  select(forest,
+         slope_pos,
+         estimate_slope.1,
+         m_error_slope.1,
+         p.value_slope.1,
+         estimate_slope.2,
+         m_error_slope.2,
+         p.value_slope.2,
+         estimate_slope.3,
+         m_error_slope.3,
+         p.value_slope.3,
+         estimate_slope.4,
+         m_error_slope.4,
+         p.value_slope.4,
+         estimate_slope.5,
+         m_error_slope.5,
+         p.value_slope.5) %>%
+  arrange(forest, slope_pos)
+print(H3_final_table, n = 27)
+
+write_xlsx(H3_final_table, hert("_analysis/H3_final_table.xlsx"))
 
 
 
+##================================ H2 FS v BS  ================================
 
-#'############################### [plotting pins] ################################
-#'############################### [ and precip  ] ################################
+pin.ls <- pin.ls
+
+#' [Calcualte net change over the whole study period]
+
+# Select only first and last mms
+final.pins <- pin.ls %>%
+  group_by(pin) %>%
+  mutate(first_last = if_else(dayof == min(dayof), dayof,
+                              if_else(dayof == max(dayof), dayof, 0))) %>% 
+  ungroup() %>% 
+  filter(first_last != 0) %>% 
+  group_by(pin) %>% 
+  mutate(dt = max(dayof) - min(dayof))
+#datatable(final.pins)
+
+# Select only the final measurements
+last.mm <- final.pins %>%
+  group_by(pin) %>%
+  slice_max(order_by = dayof, n = 1, with_ties = FALSE) %>%
+  ungroup()
+#datatable(last.mm)
+
+# Compute average of final measurements for each forest and slope pos 
+net.erosion <- last.mm %>%
+  group_by(forest, slope_pos) %>% 
+  summarise(net_change = mean(mm)) %>% 
+  arrange(forest, slope_pos)
 
 
-#'############################### [cumulative precip per period] ################################
+#' [Calculate rate of change over the whole study period - with signifigance]
 
-filter.pin.ls <- pin.ls %>% filter(forest != "IH")
+# Select only first non-zero mm and last mm
+second.last <- pin.ls %>%
+ # filter(forest == "ASH") %>% 
+  group_by(pin) %>%
+  filter(dayof != min(dayof)) %>% # remove first mm
+  mutate(first_last = if_else(dayof == min(dayof), dayof, # this grabs the second min then, and the last
+                              if_else(dayof == max(dayof), dayof, 0))) %>% 
+  ungroup() %>% 
+  filter(first_last != 0) %>% 
+  group_by(pin) %>% 
+  mutate(dt = max(dayof) - min(dayof))
 
-# WIP plot dmdt / precip
-ggplot(data = filter.pin.ls, mapping = aes(y = dmm, x = period.sum, linetype = forest)) +
-  geom_jitter(aes(color = forest)) +
-  geom_smooth(method = "lm", se = TRUE) +
-  facet_wrap(~worms, ncol = 1)
 
-#'############################### [pins] ################################
+# Divide up data
+# Create a list to hold plots
+plots <- vector(mode = "list", length = nforests)
 
-# split
-forest.list <- vector(mode = "list", length = nforests) # create empty list
-for(i in 1:nforests) { # for loop to split
-  forest.list[[i]] <- pin.ls %>% filter(forest == forests[i])
+# Create empty list, 2x for hill slope positions
+pin.list <- vector(mode = "list",length = nforests)
+# for loop to split by forest for BS
+for(i in 1:nforests) {
+  pin.list[[i]] <- second.last %>% filter(forest == forests[i])
 }
 
 
-# create plots
-pins.plots <- lapply(forest.list, function(df) {
-  forest_name <- unique(df$forest)
-  title_text <- if_else(length(forest_name) == 1, forest_name, paste(forest_name, collapse = ", "))
 
-  a <- ggplot(data = df, mapping = aes(x = date, y = mm)) +
-    geom_line(aes(group = pin, color =  slope_pos)) +
-    geom_boxplot(aes(group = forest_date), width = 1.5) +
-    geom_line(aes(x = date, y = lspline), color = "black", linewidth = 1, linetype = 2) +
-    #scale_y_continuous(limits = c(-20, 20)) + # cuts off some out liers, fine for visualization
-    scale_x_date(limits = c(ymd("2025-07-01"), ymd("2025-10-15"))) +
-    geom_hline(yintercept = 0) +
-    theme(axis.title.x = element_blank()) +
-    ggtitle(label = title_text) +
-    theme(legend.position = "none")
+
+# Fit lm's to each and plot
+for (i in 1:(nforests)){
+
+  # Fit lm
+  lm.t <- lm(data = pin.list[[i]], mm ~ dayof * slope_pos - 1) # effects coding for model
+
+  # Save coefficients
+  coefs.t <- tidy(lm.t)
+  coefs.t$forest = unique(pin.list[[i]]$forest)
+
+  ifelse(i == 1,
+         lm.coefs <- coefs.t,
+         lm.coefs <- merge(lm.coefs, coefs.t, all = TRUE)) # merge data frames
+
+  }
+
+
+# Trim dataset
+H2_final_table <- lm.coefs %>% 
+  arrange(forest) %>% 
+  filter(term == "dayof" | term == "dayof:slope_posFS") %>% 
+  mutate(estimate = round((estimate * 365 / 10), digits = 3),
+         std.error = round((std.error), digits = 3),
+         p.value = round((p.value), digits = 5)) %>% 
+  select(forest, term, estimate, std.error, p.value) %>% 
+  pivot_wider(
+    id_cols = forest,
+    names_from = term,
+    values_from = c(estimate, std.error, p.value)
+  ) %>% 
+  rename(slope_bs = "estimate_dayof",
+         SE_bs = "std.error_dayof",
+         p_bs = "p.value_dayof",
+         dslope_fs = "estimate_dayof:slope_posFS",
+         SE_fs = "std.error_dayof:slope_posFS",
+         p_fs = "p.value_dayof:slope_posFS")
+
+
+write_xlsx(H2_final_table, hert("_analysis/H2_final_table.xlsx"))
+
+
+#================================ Pub Tables ================================
+
+##================================ H3 ================================
+
+# Run ONE Of the two following chunks to select the datasets to put in table
+# For ARB and LR
+H3_final_table.df <- H3_final_table %>% 
+  filter(forest == "ASH" |
+           forest == "LRE" |
+           forest == "LRW" |
+           forest == "MAG" |
+           forest == "WD" |
+           forest == "LRJ")
+
+# For Par-Sci
+H3_final_table.df <- H3_final_table %>% 
+  filter(forest == "RCE" |
+           forest == "LME" |
+           forest == "IH" |
+           forest == "RCJ" |
+           forest == "LMJ" |
+           forest == "NH" |
+           forest == "PLH")
+
+
+
+# Add data and format table
+H3_mm_over_time.ft <- flextable(H3_final_table.df,
+                col_keys = c("forest",
+                             "slope_pos",
+                             "blank",
+                             "estimate_slope.1",
+                             "m_error_slope.1",
+                             #"p.value_slope.1",
+                             "blank1",
+                             "estimate_slope.2",
+                             "m_error_slope.2",
+                             #"p.value_slope.2",
+                             "blank2",
+                             "estimate_slope.3",
+                             "m_error_slope.3",
+                             #"p.value_slope.3",
+                             "blank3",
+                             "estimate_slope.4",
+                             "m_error_slope.4",
+                             #"p.value_slope.4",
+                             "blank4",
+                             "estimate_slope.5",
+                             "m_error_slope.5"
+                             #"p.value_slope.5"))
+                             ))%>% 
+  empty_blanks() %>%
   
-  return(a)
-})
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  
+  align(align = "center", part = "all") %>% 
+  valign(valign = "center", part = "header") %>% 
+  
+  add_footer_lines("* indicates signifgance to p < 0.05")
+
+# * all significant values
+H3_mm_over_time.ft <- H3_mm_over_time.ft %>% 
+  mk_par(j = "estimate_slope.1",
+         i = ~ p.value_slope.1 < 0.05,
+         value = as_paragraph(
+           estimate_slope.1,
+           "*"
+           )) %>% 
+  mk_par(j = "estimate_slope.2",
+         i = ~ p.value_slope.2 < 0.05,
+         value = as_paragraph(
+           estimate_slope.2,
+           "*"
+         )) %>% 
+  mk_par(j = "estimate_slope.3",
+         i = ~ p.value_slope.3 < 0.05,
+         value = as_paragraph(
+           estimate_slope.3,
+           "*"
+         )) %>% 
+  mk_par(j = "estimate_slope.4",
+         i = ~ p.value_slope.4 < 0.05,
+         value = as_paragraph(
+           estimate_slope.4,
+           "*"
+         )) %>% 
+  mk_par(j = "estimate_slope.5",
+         i = ~ p.value_slope.5 < 0.05,
+         value = as_paragraph(
+           estimate_slope.5,
+           "*"
+         )) 
 
 
-# get legend
-legend <- get_legend(
-  pins.plots[[1]] + theme(legend.position = "right")
-)
+H3_mm_over_time.ft <- H3_mm_over_time.ft %>% 
+  add_header_row(values = c("",
+                            "Period 1",
+                            "Period 2",
+                            "Period 3",
+                            "Period 4",
+                            "Period 5"),
+                 colwidths = c(2, # adds up to total number of cols
+                               3,
+                               3,
+                               3,
+                               3,
+                               3))
 
-plot_grid(legend, plotlist = pins.plots) # plot all plots
+H3_mm_over_time.ft <- H3_mm_over_time.ft %>% labelizor(
+  part = "header", 
+  labels = c("forest" = "Site",
+             "slope_pos" = "Slope Position",
+             "estimate_slope.1" = "Erosion (cm/yr)",
+             "m_error_slope.1" = "Error (+/-)",
+             #"p.value_slope.1" = "p-value",
+             "estimate_slope.2" = "Erosion (cm/yr)",
+             "m_error_slope.2" = "Error (+/-)",
+             #"p.value_slope.2" = "p-value",
+             "estimate_slope.3" = "Erosion (cm/yr)",
+             "m_error_slope.3" = "Error (+/-)",
+             #"p.value_slope.3" = "p-value",
+             "estimate_slope.4" = "Erosion (cm/yr)",
+             "m_error_slope.4" = "Error (+/-)",
+             #"p.value_slope.4" = "p-value",
+             "estimate_slope.5" = "Erosion (cm/yr)",
+             "m_error_slope.5" = "Error (+/-)"
+             #"p.value_slope.5" = "p-value"
+  ))
 
-pins.plots[6] # plot a single plot
+H3_mm_over_time.ft
+
+##================================ H2 ================================
+
+H2_mm_over_time.ft <- flextable(H2_final_table,
+                                col_keys = c("forest",
+                                             "slope_bs",
+                                             "dslope_fs",
+                                             "blank",
+                                             "SE_bs",
+                                             "SE_fs"
+                                             )) %>% 
+  empty_blanks() %>%
+  
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  
+  align(align = "center", part = "all") %>% 
+  valign(valign = "center", part = "header") %>% 
+  
+  padding(part = "all", padding = 3) %>% 
+  
+  add_footer_lines("* Indicates signifgance to p < 0.05. Estimates for the backslope are evaluate as signifigantly different than zero. Estimates for the footslope are evaluated as signifigantly different than the backslope.")
 
 
-#'############################### [precip] ################################
+# * all significant values
+H2_mm_over_time.ft <- H2_mm_over_time.ft %>% 
+  mk_par(j = "slope_bs",
+         i = ~ p_bs < 0.05,
+         value = as_paragraph(
+           slope_bs,
+           "*"
+         )) %>% 
+  mk_par(j = "dslope_fs",
+         i = ~ p_fs < 0.05,
+         value = as_paragraph(
+           dslope_fs,
+           "*"
+         ))
+
+
+H2_mm_over_time.ft <- H2_mm_over_time.ft %>% labelizor(
+  part = "header", 
+  labels = c("forest" = "Site",
+             "slope_bs" = "BS Slope (cm/yr)",
+             "dslope_fs" = "FS Slope (Δ cm/yr)",
+             "SE_bs" = "BS SE",
+             "SE_fs" = "FS SE"
+  ))
+
+
+H2_mm_over_time.ft
+
+#================================ Plotting ================================
+
+##================================ H3 ARB-LR ================================
+
+datatable(plotings)
+
+# Run ONE Of the two following chunks to select the datasets to put in table
+# For ARB and LR
+plotings <- pin.ls %>% 
+  filter(forest == "ASH" |
+           forest == "LRE" |
+           forest == "LRW" |
+           forest == "MAG" |
+           forest == "WD" |
+           forest == "LRJ")
+
+
+ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
+  
+  geom_line(aes(group = pin,
+                color =  slope_pos),
+            linetype = 1) +
+  
+  geom_boxplot(aes(group = forest_date,
+                   width = 3,
+                   fill = slope_pos)) +
+  
+  geom_line(data = plotings,
+            aes(x = date,
+                y = lspline,
+                linetype = slope_pos),
+            linewidth = 1) +
+  
+  facet_wrap(~forest, ncol = 3) + # For ARB / LR
+  
+  # Visuals
+  scale_color_manual(
+    name = "Slope Position",
+    values = c(
+      "FS" = "darkolivegreen3",
+      "BS" = "grey50"
+    )) +
+  
+  scale_fill_manual(
+    name = "Slope Position",
+    values = c(
+      "FS" = "darkolivegreen3",
+      "BS" = "grey50"
+    )) +
+  
+  scale_linetype_discrete(name = "Slope Position") +
+  
+  scale_y_continuous( 
+    limits = c(-20, 20),
+    name = "Adjusted height (mm)") + # May cut off some outliers, fine for visualization
+  scale_x_date(limits = c(ymd("2025-07-10"), ymd("2025-10-01")),
+               name = "Date",
+               date_breaks = "1 month", date_labels = "%b") + # Remove this section for Par-Sci
+  geom_hline(yintercept = 0, linewidth = 0.5) +
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_line(color = "white"),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        text = element_text(family = "Calibri"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        
+        strip.background = element_rect(
+          fill = "white",   # or any color
+          color = "white",  # border color
+          linewidth = 0.5
+        ),
+        
+        strip.text = element_text(
+          family = "Calibri",
+          #face = "oblique",
+          color = "black",
+          hjust = 0,   # left
+          vjust = 0  # vertical centering
+          
+        )
+        
+  ) 
+
+##================================ H3 Par-Sci ================================
+
+# For Par-Sci
+plotings <- pin.ls %>% 
+  filter(forest == "RCE" |
+           forest == "LME" |
+           forest == "IH" |
+           forest == "RCJ" |
+           forest == "LMJ" |
+           forest == "NH" |
+           forest == "PLH")
+
+ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
+  
+  geom_line(aes(group = pin,
+                color =  slope_pos),
+            linetype = 1) +
+  
+  geom_boxplot(aes(group = forest_date,
+                   width = 3,
+                   fill = slope_pos)) +
+  
+  geom_line(data = plotings,
+            aes(x = date,
+                y = lspline,
+                linetype = slope_pos),
+            linewidth = 1) +
+  
+#  facet_wrap(~forest, ncol = 3) + # For ARB / LR
+  facet_wrap(~forest, ncol = 3, scales = "free_x") +
+
+  # Visuals
+  scale_color_manual(
+    name = "Slope Position",
+    values = c(
+    "FS" = "darkolivegreen3",
+    "BS" = "grey50"
+  )) +
+  
+  scale_fill_manual(
+    name = "Slope Position",
+    values = c(
+    "FS" = "darkolivegreen3",
+    "BS" = "grey50"
+  )) +
+  
+  scale_linetype_discrete(name = "Slope Position") +
+  
+  scale_y_continuous( 
+    limits = c(-20, 20),
+    name = "Adjusted height (mm)") + # May cut off some outliers, fine for visualization
+  scale_x_date(name = "Date",
+               date_breaks = "1 month", date_labels = "%b %d") + # Remove this section for Par-Sci
+  geom_hline(yintercept = 0, linewidth = 0.5) +
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_line(color = "white"),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        text = element_text(family = "Calibri"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        
+        strip.background = element_rect(
+          fill = "white",   # or any color
+          color = "white",  # border color
+          linewidth = 0.5
+        ),
+        
+        strip.text = element_text(
+          family = "Calibri",
+          #face = "oblique",
+          color = "black",
+          hjust = 0,   # left
+          vjust = 0  # vertical centering
+          
+        )
+        
+  ) 
+
+
+
+##================================ Precip ================================
 
 # pull precip data from box
 precip.list <- list(
@@ -378,7 +815,10 @@ plot_grid(ncol = 1,
 
 
 
-#'############################### [together] ################################
+
+
+#================================ OLD ================================
+
 
 pins.plots # pins
 precip.plots # precip
@@ -437,12 +877,229 @@ plot_grid(ncol = 4, nrow = 4,
 
 
 
+filter.pin.ls <- pin.ls %>% filter(forest != "IH")
+
+# WIP plot dmdt / precip
+ggplot(data = filter.pin.ls, mapping = aes(y = dmm, x = period.sum, linetype = forest)) +
+  geom_jitter(aes(color = forest)) +
+  geom_smooth(method = "lm", se = TRUE) +
+  facet_wrap(~worms, ncol = 1)
+
+
+# split
+forest.list <- vector(mode = "list", length = nforests) # create empty list
+for(i in 1:nforests) { # for loop to split
+  forest.list[[i]] <- pin.ls %>% filter(forest == forests[i])
+}
+
+
+# create plots, one for each forest, and store them in a list
+pins.plots <- lapply(forest.list, function(df) {
+  forest_name <- unique(df$forest)
+  title_text <- if_else(length(forest_name) == 1, forest_name, paste(forest_name, collapse = ", "))
+  
+  a <- ggplot(data = df, mapping = aes(x = date, y = mm)) +
+    
+    geom_line(aes(group = pin,
+                  color =  slope_pos)) +
+    
+    geom_boxplot(aes(group = forest_date,
+                     width = 3,
+                     fill = slope_pos)) +
+    
+    geom_line(data = df,
+              aes(x = date,
+                  y = lspline,
+                  linetype = slope_pos),
+              linewidth = 1) +
+    
+    # Visuals
+    
+    scale_color_manual(values = c(
+      "FS" = "khaki2",
+      "BS" = "firebrick4"
+    )) +
+    
+    scale_fill_manual(values = c(
+      "FS" = "khaki2",
+      "BS" = "firebrick4"
+    )) +
+    
+    scale_y_continuous(
+      limits = c(-20, 20),
+      name = "Adjusted height (mm)") + # cuts off some out liers, fine for visualization
+    scale_x_date(limits = c(ymd("2025-07-10"), ymd("2025-10-01"))) +
+    geom_hline(yintercept = 0, linewidth = 0.5) +
+    ggtitle(label = title_text) +
+    theme(axis.title.x = element_blank(),
+          legend.position = "none",
+          panel.grid.major.x = element_line(color = "white"),
+          panel.grid.major.y = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank(),
+          panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)
+    ) 
+  
+  return(a)
+})
 
 
 
+# get legend if wanted
+legend <- get_legend(
+  pins.plots[[1]] + theme(legend.position = "left")
+)
 
-#'############################### [stats - forests OLD] ################################
-#'############################### [stats - forests OLD] ################################
+# plot arb & LR
+plot_grid(plotlist = pins.plots[1:6],
+          ncol = 3) # plot all plots
+
+# plot par-sci
+plot_grid(plotlist = pins.plots[7:13],
+          ncol = 3) # plot all plots
+
+
+pins.plots[6] # plot a single plot
+
+# plot_grid(plotlist = plots[1:6],
+#           ncol = 3) # plot BS plots
+# 
+# plot_grid(plotlist = plots[7:12],
+#           ncol = 3) # plot FS plots
+
+
+
+#' Divide up data  [this is old, fits a seperate model to each]
+# # Create a list to hold plots
+# plots <- vector(mode = "list", length = nforests * 2)
+# 
+# # Create empty list, 2x for hill slope positions
+# pin.list <- vector(mode = "list",length = nforests * 2) 
+# # for loop to split by forest for BS
+# for(i in 1:nforests) { 
+#   pin.list[[i]] <- second.last %>% filter(forest == forests[i] & slope_pos == hill.poses[1])
+# }
+# # for loop to split by forest for FS
+# for(i in 1:nforests) { 
+#   pin.list[[i + nforests]] <- second.last %>% filter(forest == forests[i] & slope_pos == hill.poses[2])
+# }
+#
+#
+#
+# # Fit lm's to each and plot
+# for (i in 1:(nforests * 2)){
+#   
+#   # Fit lm
+#   lm.t <- lm(data = pin.list[[i]], mm ~ dayof)
+#   
+#   # Save coefficients
+#   coefs.t <- tidy(lm.t)
+#   coefs.t$forest = unique(pin.list[[i]]$forest)
+#   coefs.t$slope_pos = unique(pin.list[[i]]$slope_pos)
+#   
+#   ifelse(i == 1,
+#          lm.coefs <- coefs.t,
+#          lm.coefs <- merge(lm.coefs, coefs.t, all = TRUE)) # merge data frames
+# 
+#   # Create plots
+#   title <- paste(unique(pin.list[[i]]$forest),unique(pin.list[[i]]$slope_pos), sep = "-")
+#   
+#   b <- ggplot(data = pin.list[[i]], mapping = aes(x = date, y = mm, group = date)) +
+#     geom_boxplot() +
+#     geom_jitter(width = 8) +
+#     ggtitle(label = title)
+#   
+#   plots[[i]] = b
+#   
+#   }
+# create significance table
+sig.table <- coefs.list %>% 
+  mutate(term = case_when(
+    term == "(Intercept)" ~ "intercept",
+    term == "lspline(dayof, knots = dates)1" ~ "slope.1",
+    term == "lspline(dayof, knots = dates)2" ~ "slope.2",
+    term == "lspline(dayof, knots = dates)3" ~ "slope.3",
+    term == "lspline(dayof, knots = dates)4" ~ "slope.4",
+    term == "lspline(dayof, knots = dates)5" ~ "slope.5",
+  )) %>% 
+  mutate(signif = if_else(p.value <= 0.1, "X", "-")) %>% 
+  select(forest,
+         slope_pos,
+         term,
+         signif) %>% 
+  pivot_wider(names_from = term, values_from = signif) %>% 
+  select(-intercept) %>% 
+  arrange(forest, slope_pos)
+
+#datatable(sig.table)
+print(sig.table, n =27)
+
+
+
+pins.plots <- pin.ls %>% 
+  filter(site == "LR" | site == "ARB")
+
+#' [WIP] create scatter plots showing mm over time
+ggplot(data = pin.ls,
+       mapping = aes(x = date,
+                     y = mm)) +
+  
+  geom_line(aes(group = pin,
+                color =  slope_pos)) +
+  
+  geom_boxplot(aes(group = forest_date,
+                   width = 3,
+                   fill = slope_pos)) +
+  
+  geom_line(data = pins.plots,
+            aes(x = date,
+                y = lspline,
+                linetype = slope_pos)) +
+  
+  facet_wrap(~forest, ncol = 2) +
+  
+  # Visual elements
+  scale_y_continuous(limits = c(-20, 20)) + # cuts off some outliers, fine for visualization
+  scale_x_date(limits = c(ymd("2025-07-01"), ymd("2025-10-15"))) +
+  geom_hline(yintercept = 0) +
+  theme(axis.title.x = element_blank())
+
+
+# Fitting linear splines, elevation by date, spline for each forest.
+
+# Split our master df (pin.p2) into different data frames in a list by forest, as these all had measurements taken on the same date (for knots)
+
+pin.list <- vector(mode = "list", length = nforests ) # create empty list
+
+for(i in 1:nforests) { # for loop to split
+  pin.list[[i]] <- pin.p2 %>% filter(forest == forests[i])
+}
+
+
+# fit lsplines and generated predicted values
+for (i in 1:nforests){
+  # fit lspline
+  dates <- unique(pin.list[[i]]$dayof)[2:(length(unique(pin.list[[i]]$dayof))-1)] # knots at here, excludes first date
+  
+  pin.lspline <- lm(data = pin.list[[i]], mm ~ lspline(dayof, knots = dates)) # fit lspline
+  pin.list[[i]]$lspline <- predict(pin.lspline) # create predictions
+  
+  ifelse(i == 1,
+         pin.ls <- pin.list[[i]],
+         pin.ls <- merge(pin.ls, pin.list[[i]], all = TRUE)) # merge data frames
+  
+  # save coefficients
+  coefs.t <- tidy(pin.lspline)
+  coefs.t$forest = forests[i]
+  
+  ifelse(i == 1,
+         coefs.list <- coefs.t,
+         coefs.list <- merge(coefs.list, coefs.t, all = TRUE)) # merge data frames
+}
+
+write_xlsx(pin.ls, hert("_analysis/pins-with-lspline.xlsx"))
+
+write_xlsx(coefs.list, hert("_analysis/lsp_coefs.xlsx"))
 
 
 #' [plotting pin elevation (mm, in mm) over time by forest] 

@@ -1,7 +1,7 @@
 #================================ Setup ================================
 
 # libraries needed
-libs <- c("")
+libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom", "DT", "flextable")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -24,9 +24,4 @@ hert <- function(file) {
 
 #================================ X ================================
 
-# Set up Git
-usethis::create_github_token()
-
-# Past code in console prompt
-gitcreds::gitcreds_set()
 
