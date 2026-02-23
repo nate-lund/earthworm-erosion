@@ -286,9 +286,7 @@ slope_all_df <- slope_all %>%
     landcover == "16 Barren Land" ~ "Barren Land",
     landcover == "17 Urban and Built-up" ~ "Urban and Built-up",
     landcover == "18 Water" ~ "Water"
-  )) %>% 
-  
-  arrange(desc(mean)) 
+  )) 
 
 
 
@@ -377,7 +375,91 @@ slope_stats_df.ft
 
 ##================================ RUSLE2 ================================
 
-rulse2_stats_df <- read.csv(hert("_analysis/_save/rusle2-landcover-stats.csv"))
+rulse2_stats <- read.csv(hert("_analysis/_save/rusle2-landcover-stats.csv"))
+
+
+
+
+# Clean up and rount stats
+rulse2_stats_df <- rulse2_stats %>% 
+  # Round
+  mutate(mean = round(mean, digits = 2),
+         median = round(median, digits = 2),
+         sum = round(sum, digits = 0),
+         landcover_. = round(landcover_., digits = 2),
+         erosion_. = round(erosion_., digits = 2)
+         ) %>% 
+  
+  # Rename landcover classes
+  filter(landcover != is.na(landcover) &
+           landcover != "18 Water") %>% 
+  mutate(landcover = case_when(
+    landcover == "1 Temperate or Subpolar Needleaf Forest" ~ "Temperate or Subpolar Needleaf Forest",
+    landcover == "5 Temperate or Subpolar Broadleaf Deciduous Forest" ~ "Temperate or Subpolar Broadleaf Deciduous Forest",
+    landcover == "6 Mixed Forest" ~ "Mixed Forest",
+    landcover == "8 Temperate or Subpolar Shrubland" ~ "Temperate or Subpolar Shrubland",
+    landcover == "10 Temperate or Subpolar Grassland" ~ "Temperate or Subpolar Grassland",
+    landcover == "14 Wetland" ~ "Wetland",
+    landcover == "15 Cropland" ~ "Cropland",
+    landcover == "16 Barren Land" ~ "Barren Land",
+    landcover == "17 Urban and Built-up" ~ "Urban and Built-up",
+    landcover == "18 Water" ~ "Water"
+  ))
+
+
+
+
+
+# Add data and format table
+rulse2_stats_df.ft <- flextable(rulse2_stats_df,
+                               col_keys = c("landcover",
+                                            "blank",
+                                            "mean",
+                                            "median",
+                                            "sum",
+                                            "blank2",
+                                            "landcover_.",
+                                            "erosion_."
+                               )) %>% 
+  empty_blanks() %>%
+  
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  
+  align(align = "center", part = "all") %>%
+  valign(valign = "center", part = "header") %>% 
+  
+  align(align = "left", j = "landcover") %>% 
+  
+  width(j = c("landcover",
+              "mean",
+              "median",
+              "sum",
+              "landcover_.",
+              "erosion_."), width = 1) %>% 
+  width(j = "landcover", width = 3) %>% 
+  
+  bold(i = ~ landcover == "Temperate or Subpolar Broadleaf Deciduous Forest" |
+         landcover == "Mixed Forest")
+
+
+
+rulse2_stats_df.ft <- rulse2_stats_df.ft %>% labelizor(
+  part = "header", 
+  labels = c("landcover" = "Landcover",
+             "mean" = "Mean (t/ha)",
+             "median" = "Median (t/ha)",
+             "sum" = "Sum (t/ha)",
+             "landcover_." = "% of Total Area",
+             "erosion_." = "% of Total Erosion"
+  ))
+
+rulse2_stats_df.ft
+
+
+
+
+
 
 
 

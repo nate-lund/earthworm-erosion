@@ -449,6 +449,8 @@ H3_final_table.df <- H3_final_table %>%
 
 
 
+
+
 # Add data and format table
 H3_mm_over_time.ft <- flextable(H3_final_table.df,
                 col_keys = c("forest",
@@ -517,6 +519,15 @@ H3_mm_over_time.ft <- H3_mm_over_time.ft %>%
            "*"
          )) 
 
+# Color erosion values
+
+H3_mm_over_time.ft <- H3_mm_over_time.ft %>% 
+  color(~ estimate_slope.1 < 0, color = "red2", j = "estimate_slope.1") %>% 
+  color(~ estimate_slope.2 < 0, color = "red2", j = "estimate_slope.2") %>% 
+  color(~ estimate_slope.3 < 0, color = "red2", j = "estimate_slope.3") %>% 
+  color(~ estimate_slope.4 < 0, color = "red2", j = "estimate_slope.4") %>% 
+  color(~ estimate_slope.5 < 0, color = "red2", j = "estimate_slope.5")
+
 
 H3_mm_over_time.ft <- H3_mm_over_time.ft %>% 
   add_header_row(values = c("",
@@ -555,9 +566,19 @@ H3_mm_over_time.ft <- H3_mm_over_time.ft %>% labelizor(
 
 H3_mm_over_time.ft
 
+
+
 ##================================ H2 ================================
 
-H2_mm_over_time.ft <- flextable(H2_final_table,
+H2_final_table.filter <- H2_final_table %>% 
+  filter(forest == "ASH" |
+           forest == "LRE" |
+           forest == "LRW" |
+           forest == "MAG" |
+           forest == "WD" |
+           forest == "LRJ")
+
+H2_mm_over_time.ft <- flextable(H2_final_table.filter,
                                 col_keys = c("forest",
                                              "slope_bs",
                                              "dslope_fs",
