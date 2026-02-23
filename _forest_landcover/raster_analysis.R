@@ -39,7 +39,7 @@ hert <- function(file) {
 
 # import rasters
 dem <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_USGS30m_DEM_r")
-slope <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_USGS30m_slope_r")
+slope <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_USGS30m_slope_r_land_less100")
 rusle2 <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_RUSLE2_30m_raster_r")
 landcover <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_LandCover_30m_2020_raster")
 
@@ -54,12 +54,10 @@ landcover <- rast(hert("_spatial/Great_Lakes_datasets.gdb"), "GL_LandCover_30m_2
 #' landcover <- crop(landcover, new_ext, snap = "out")
 #' 
 #' landcover <- classify(landcover, cbind(255, 0)) # remove weird 255 land cover classes made by cropping
-#' 
-#' plot(landcover)
 
 # import feature classes
-huc12 <- vect(hert("_spatial/Great_Lakes_datasets.gdb"), layer = "GL_HUC12")
-states <- vect(hert("_spatial/Great_Lakes_datasets.gdb"), layer = "GL_state_boundaries")
+#huc12 <- vect(hert("_spatial/Great_Lakes_datasets.gdb"), layer = "GL_HUC12")
+#states <- vect(hert("_spatial/Great_Lakes_datasets.gdb"), layer = "GL_state_boundaries")
 
 
 #================================ Cleanup Data ================================
@@ -100,11 +98,11 @@ plot(rusle2)
 
 
 # change format of feature classes for plotting and project to WGS 84 (EPSG:4326) assuming current CRS is EPSG:26918 (NAD83 / UTM zone 18N)
-huc12.sf <- st_as_sf(huc12)
-huc12.84 <- st_as_sf(huc12) %>% st_transform(crs = 4326)
-
-states.sf <- st_as_sf(states)
-states.84 <- st_as_sf(states) %>% st_transform(crs = 4326)
+# huc12.sf <- st_as_sf(huc12)
+# huc12.84 <- st_as_sf(huc12) %>% st_transform(crs = 4326)
+# 
+# states.sf <- st_as_sf(states)
+# states.84 <- st_as_sf(states) %>% st_transform(crs = 4326)
 
 
 #================================ RUSLE2 ================================
@@ -116,13 +114,12 @@ states.84 <- st_as_sf(states) %>% st_transform(crs = 4326)
 landcover <- landcover # call landcover
 raster.in <- rusle2 # call slope raster
 
-#' [TERRA][simple] ---------------------------------------------------------------
 # calculate a quick mean, median, max, and min for each land cover
 
-landcover.int <- as.int(landcover) # land cover needs to be an integer, not categorical
+landcover.int <- classify(landcover, cbind(0, NA)) %>% # remove NoDatas
+  as.int() # land cover needs to be an integer here, not categorical 
 
-zonal.stats <- data.frame("landcover" = c("NoData",
-                                          "1 Temperate or Subpolar Needleaf Forest",
+zonal.stats <- data.frame("landcover" = c("1 Temperate or Subpolar Needleaf Forest",
                                           "5 Temperate or Subpolar Broadleaf Deciduous Forest",
                                           "6 Mixed Forest",
                                           "8 Temperate or Subpolar Shrubland",
@@ -131,19 +128,20 @@ zonal.stats <- data.frame("landcover" = c("NoData",
                                           "15 Cropland",
                                           "16 Barren Land",
                                           "17 Urban and Built-up",
-                                          "18 Water"),
-                          "count" = freq(landcover.int)[,3],
-                          "mean" = terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2],
+                                          "18 Water",
+                                          "NA"),
+                          "mean" = terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2], 
                           "median" = terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2],
-                          "max" = terra::zonal(raster.in, landcover.int, "max", na.rm = TRUE)[,2],
-                          "min" = terra::zonal(raster.in, landcover.int, "min", na.rm = TRUE)[,2],
-                          "sum" = terra::zonal(raster.in, landcover.int, "sum", na.rm = TRUE)[,2]) %>% 
+                          "sum" = terra::zonal(raster.in, landcover.int, "sum", na.rm = TRUE)[,2],
+                          "count" = freq(landcover.int)[,3] ) %>%  # number of cells per class
+  
+  mutate("landcover_%" = count / sum(count) * 100, # percent of area each landcover is responsible for
+         "erosion_%" = sum / sum(values(raster.in), na.rm = TRUE) * 100) %>% # percent of erosion each landcover is responsible for
   drop_na()
 
+tibble(zonal.stats) # print, data is in tonnes per hectare
 
-tibble(zonal.stats) # print
-
-write.csv(zonal.stats, hert("_analysis/rusle2-landcover-stats.csv")) # export to excel
+#write.csv(zonal.stats, hert("_analysis/rusle2-landcover-stats.csv")) # export to excel
 
 
 
@@ -184,7 +182,7 @@ zonal.stats <- data.frame("landcover" = c("NoData",
 
 tibble(zonal.stats) # print
 
-write.csv(zonal.stats, hert("_analysis/slope-landcover-stats.csv")) # export to excel
+#write.csv(zonal.stats, hert("_analysis/slope-landcover-stats.csv")) # export to excel
 
 
 
@@ -223,8 +221,8 @@ stack.vis <- stack.sum %>%
               values_from = frac)
 
 # export
-write.csv(stack.vis, hert("_analysis/slope-landcover-bins.csv")) # export clean table for manuscript
-write.csv(stack.sum, hert("_analysis/slope-landcover-bins-plots.csv")) # export df to plot later
+#write.csv(stack.vis, hert("_analysis/slope-landcover-bins.csv")) # export clean table for manuscript
+#write.csv(stack.sum, hert("_analysis/slope-landcover-bins-plots.csv")) # export df to plot later
 
 
 # plot bins for each land cover
