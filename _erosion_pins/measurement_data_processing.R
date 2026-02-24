@@ -450,6 +450,14 @@ H3_final_table.df <- H3_final_table %>%
 
 
 
+# Remove duplicated forest names
+H3_final_table.df <- H3_final_table.df %>%
+  mutate(forest = as.character(forest)) %>%
+  group_by(forest) %>%
+  mutate(forest = ifelse(row_number() == 1, forest, "")) %>%
+  ungroup()
+
+
 
 # Add data and format table
 H3_mm_over_time.ft <- flextable(H3_final_table.df,
@@ -565,6 +573,9 @@ H3_mm_over_time.ft <- H3_mm_over_time.ft %>% labelizor(
   ))
 
 H3_mm_over_time.ft
+
+
+
 
 
 

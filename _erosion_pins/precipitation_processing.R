@@ -36,13 +36,15 @@ precip.list <- list(
 
 # format data for processing
 precip.list <- lapply(precip.list, function(df) {
-  df <- mutate(df, date = as.Date(Date),
-               precip = ppt..inches. / 2.54,
-               mtemp = (tmean..degrees.F. - 32) * 5 / 9,
+  df <- mutate(df, date = as.Date(Date), # Format date
+               precip = ppt..inches. / 2.54, # Convert precip from in to cm
+               mtemp = (tmean..degrees.F. - 32) * 5 / 9, # Convert temp from F to C
                cum.precip = cumsum(precip),
                .keep = "unused")
   return(df)
 })
+
+
 
 precip.all <- bind_rows(precip.list, .id = "id")
 
@@ -56,9 +58,16 @@ precip.all <- precip.all %>%
     id == 6 ~ "RHS",
   ))
 
+
 head(precip.all)
 
+# Get precip totals for 7-01 through 9-15
+precip_totals <- precip.all %>% 
+  group_by(site) %>% 
+  summarize(total = sum(precip))
 
+
+ 
 # plot hydrographs
 ggplot(precip.all, mapping = aes(x = date, y = precip)) +
   geom_col() +
