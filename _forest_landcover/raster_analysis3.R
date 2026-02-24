@@ -1,7 +1,7 @@
 #================================ Setup ================================
 
 # libraries needed
-libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco", "rasterVis", "raster", "elevatr", "mapview", "leaflet", "tmap", "RColorBrewer", "exactextractr", "emmeans", "lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom", "flextable", "officer")
+libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco", "rasterVis", "raster", "elevatr", "mapview", "leaflet", "tmap", "RColorBrewer", "exactextractr", "emmeans", "lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom", "flextable")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -108,53 +108,40 @@ plot(rusle2)
 #================================ RUSLE2 ================================
 
 ##================================ Summary Stats ================================
-# Calculate a quick mean, median, max, and min for each land cover
 
 
 # input the raster needed for statics here
-landcover.int <- landcover # call landcover
-raster.in <- rusle2 # call rusle2 raster
+landcover <- landcover # call landcover
+raster.in <- rusle2 # call slope raster
 
-levels(landcover.int)
+# calculate a quick mean, median, max, and min for each land cover
 
-# Compute statistics
-rusle_mean <- terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2]
-rusle_median <- terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2]
-rusle_sum <- terra::zonal(raster.in, landcover.int, "sum", na.rm = TRUE)[,2]
-rusle_area <- terra::zonal(cellSize(landcover.int, unit="km"),
-                    landcover.int, fun="sum")[,2]
+landcover.int <- classify(landcover, cbind(0, NA)) %>% # remove NoDatas
+  as.int() # land cover needs to be an integer here, not categorical 
 
-
-# # Global (total) stats
-# g_rusle_mean <- terra::global(raster.in, "mean", na.rm = TRUE)[,1]
-# g_rusle_median <- NA #terra::global(raster.in, "median", na.rm = TRUE)[,1] # doesn't work
-# g_rusle_sum <- terra::global(raster.in, "sum", na.rm = TRUE)[,1]
-# g_rusle_area <- terra::global(cellSize(landcover.int, unit="km"),
-#                     landcover.int, fun = "sum")[,1]
-
-
-# Build summary df
-rusle_stats <- data.frame("landcover" = levels(landcover.int),
-                          "mean" = rusle_mean[1:11], 
-                          "median" = rusle_median[1:11],
-                          "sum" = rusle_sum[1:11],
-                          "area_km" = rusle_area[1:11]) %>% # number of cells per class
-  filter(landcover.ID != 0 &
-           landcover.ID != 18) %>% # remove NA and water before doing percentages
+zonal.stats <- data.frame("landcover" = c("1 Temperate or Subpolar Needleaf Forest",
+                                          "5 Temperate or Subpolar Broadleaf Deciduous Forest",
+                                          "6 Mixed Forest",
+                                          "8 Temperate or Subpolar Shrubland",
+                                          "10 Temperate or Subpolar Grassland",
+                                          "14 Wetland",
+                                          "15 Cropland",
+                                          "16 Barren Land",
+                                          "17 Urban and Built-up",
+                                          "18 Water",
+                                          "NA"),
+                          "mean" = terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2], 
+                          "median" = terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2],
+                          "sum" = terra::zonal(raster.in, landcover.int, "sum", na.rm = TRUE)[,2],
+                          "count" = freq(landcover.int)[,3] ) %>%  # number of cells per class
   
-  mutate("area_perc" = area_km / sum(area_km) * 100, # percent of area each landcover is responsible for
-         "erosion_perc" = sum / sum(sum) * 100)  # percent of erosion each landcover is responsible for
+  mutate("landcover_%" = count / sum(count) * 100, # percent of area each landcover is responsible for
+         "erosion_%" = sum / sum(values(raster.in), na.rm = TRUE) * 100) %>% # percent of erosion each landcover is responsible for
+  drop_na()
 
-# Add totals row
-rusle_stats <- rusle_stats %>%
-  add_row(landcover.land_cover = "Total", mean = mean(rusle_stats$mean), sum = sum(rusle_stats$sum), area_km = sum(rusle_stats$area_km)) # Add totals row
+tibble(zonal.stats) # print, data is in tonnes per hectare
 
-
-tibble(rusle_stats) # print, data is in tonnes per hectare
-
-
-
-#write.csv(rusle_stats, hert("_analysis/rusle2-landcover-stats.csv")) # export to excel
+#write.csv(zonal.stats, hert("_analysis/rusle2-landcover-stats.csv")) # export to excel
 
 
 
@@ -162,58 +149,44 @@ tibble(rusle_stats) # print, data is in tonnes per hectare
 #================================ Slope ================================
 
 ##================================ Summary Stats ================================
-# calculate a quick mean, median, max, and min for each land cover
-
 
 # input the raster needed for statics here
-landcover.int <- landcover # landcover is also needed
+landcover <- landcover # landcover is also needed
 raster.in <- slope # call slope raster
 
 
-# Compute statistics
-slope_mean <- terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2]
-slope_median <- terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2]
-slope_area <- zonal(cellSize(landcover.int, unit="km"),
-                    landcover.int, fun="sum")[,2]
+#' [TERRA][simple] ---------------------------------------------------------------
+# calculate a quick mean, median, max, and min for each land cover
+
+landcover.int <- as.int(landcover) # land cover needs to be an integer, not categorical
+
+zonal.stats <- data.frame("landcover" = c("NoData",
+                                          "1 Temperate or Subpolar Needleaf Forest",
+                                          "5 Temperate or Subpolar Broadleaf Deciduous Forest",
+                                          "6 Mixed Forest",
+                                          "8 Temperate or Subpolar Shrubland",
+                                          "10 Temperate or Subpolar Grassland",
+                                          "14 Wetland",
+                                          "15 Cropland",
+                                          "16 Barren Land",
+                                          "17 Urban and Built-up",
+                                          "18 Water",
+                                          "NA"),
+                          "count" = freq(landcover.int)[,3],
+                          "mean" = terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2],
+                          "median" = terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2],
+                          "max" = terra::zonal(raster.in, landcover.int, "max", na.rm = TRUE)[,2],
+                          "min" = terra::zonal(raster.in, landcover.int, "min", na.rm = TRUE)[,2]) %>% 
+  drop_na()
+
+
+tibble(zonal.stats) # print
+
+#write.csv(zonal.stats, hert("_analysis/slope-landcover-stats.csv")) # export to excel
 
 
 
-# Global (total) stats
-g_slope_mean <- terra::global(raster.in, "mean", na.rm = TRUE)[,1]
-g_slope_median <- NA #terra::global(raster.in, "median", na.rm = TRUE)[,1] # doesn't work
-g_slope_area <- terra::global(cellSize(landcover.int, unit="km"),
-                              landcover.int, fun = "sum")[,1]
-
-
-# Build summary df
-slope_stats <- data.frame("landcover" = levels(landcover.int),
-                          "mean" = slope_mean[1:11], 
-                          "median" = slope_median[1:11],
-                          "area_km" = slope_area[1:11]) %>% # number of cells per class
-  filter(landcover.ID != 0 &
-           landcover.ID != 18) %>% # Remove NA cells prior to area calculations
-  
-  mutate("area_perc" = area_km / sum(area_km) * 100)  # percent of area each landcover is responsible for
-
-# Add totals row
-slope_stats <- slope_stats %>%
-  add_row(landcover.land_cover = "Overall", mean = mean(slope_stats$mean), area_km = sum(slope_stats$area_km)) # Add totals row
-
-
-tibble(slope_stats) # print, data is in tonnes per hectare
-
-
-#write.csv(slope_stats, hert("_analysis/slope-landcover-stats.csv")) # export to excel
-
-
-
-##================================ Binned by LC ================================
-
-# input the raster needed
-landcover.int <- landcover # landcover is also needed
-raster.in <- slope # call slope raster
-
-
+##================================ Binned Slope Table ================================
 
 # define slope bins & create a maxtrix of the bin distribtions
 bins <- data.frame(A = c(0, 2, 5, 15, 30, 50), # "left" bin side
@@ -226,7 +199,7 @@ slope.binned <- classify(raster.in, slope.bins) # apply bins to slope raster
 # apply proper slope bin titles
 slope.cats <- data.frame(
   ID = c(1, 2, 3, 4, 5, 6),
-  slope_class = c("0_2", "02_5", "05_15", "15_30", "30_50", "50_100")
+  slope_class = c("0 - 2", "02  - 5", "05 - 15", "15 - 30", "30 - 50", "50 - 100")
 )
 levels(slope.binned) <- slope.cats # Associate the data frame with the raster
 
@@ -235,50 +208,28 @@ levels(slope.binned) <- slope.cats # Associate the data frame with the raster
 stack <- c(landcover, slope.binned) # stack land cover and binned slope raseters
 stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
 
-# For totals
-slope_totals <- freq(slope.binned) %>% 
-  mutate(frac = count / sum(count) * 100)
-
-
 stack.sum <- stack.area %>%
   drop_na() %>% 
   group_by(land_cover) %>% 
   mutate(nsum = sum(n)) %>% 
   ungroup() %>% 
-  mutate(lc_frac = n / nsum * 100)
+  mutate(frac = n / nsum * 100)
 
-
-# Pivot df for slope percent breakdown 
-stack_slope <- stack.sum %>% 
-  group_by(slope_class) %>% 
-  mutate(slope_frac = lc_frac / sum(lc_frac, na.rm = TRUE) * 100) %>% 
-  ungroup() %>% 
-  arrange(slope_class) %>% 
-  select(-n, -nsum, -lc_frac) %>% 
-  pivot_wider(names_from = slope_class,
-              values_from = slope_frac)
-
-# Pivot df for landcover percent breakdown
-stack_lc <- stack.sum %>%
+stack.vis <- stack.sum %>%
   select(-n, -nsum) %>% 
   pivot_wider(names_from = slope_class,
-              values_from = lc_frac) %>% 
-  add_row(land_cover = "Overall",
-          `0_2` = slope_totals[1,4],
-          `02_5` = slope_totals[2,4],
-          `05_15` = slope_totals[3,4],
-          `15_30` = slope_totals[4,4],
-          `30_50` = slope_totals[5,4],
-          `50_100` = slope_totals[6,4],) # Add total row
-
-# Visualize
-tibble(stack_slope)
-tibble(stack_lc)
+              values_from = frac)
 
 # export
-# write.csv(stack_slope, hert("_analysis/slope-stack_slope.csv")) # export clean table for manuscript
-# write.csv(stack_lc, hert("_analysis/slope-stack_lc.csv")) # export df to plot later
+#write.csv(stack.vis, hert("_analysis/slope-landcover-bins.csv")) # export clean table for manuscript
+#write.csv(stack.sum, hert("_analysis/slope-landcover-bins-plots.csv")) # export df to plot later
 
+
+# plot bins for each land cover
+ggplot(data = stack.sum, mapping = aes(y = frac, x = slope_class)) +
+  geom_col() +
+  facet_wrap(~land_cover, ncol = 2, scales = "free_y") +
+  geom_vline(xintercept = -0.534) # mean of... cropland
 
 
 
@@ -289,67 +240,53 @@ tibble(stack_lc)
 
 #================================ Pub Tables ================================
 
-
-##================================ Slope Bins ================================
-
-slope_stack_lc_df <- read.csv(hert("_analysis/slope-stack_lc.csv"))
-slope_stack_slope_df <- read.csv(hert("_analysis/slope-stack_slope.csv"))
-
-slope_bins <- left_join(slope_stack_lc_df, slope_stack_slope_df, by = "land_cover")
-
-
-
-
-
-##================================ Slope Stats ================================
-
+##================================ Slope ================================
 
 # Because of the computational intensity required for these datasets, 
 # we save data following computation and upload it here
 
-slope_stats_df <- read.csv(hert("_analysis/slope-landcover-stats.csv"))
-slope_stats_df <- slope_stats_df %>% # Rename landcover to be same as in first df
-  rename(land_cover = landcover.land_cover)
-
-
-slope_stack_lc_df <- read.csv(hert("_analysis/slope-stack_lc.csv"))
-slope_stack_slope_df <- read.csv(hert("_analysis/slope-stack_slope.csv"))
-
-
+slope_stats_df <- read.csv(hert("_analysis/_save/slope-landcover-stats.csv"))
+slope_bins_df <- read.csv(hert("_analysis/_save/slope-landcover-bins.csv"))
+slope_bins_df <- slope_bins_df %>% # Rename landcover to be same as in first df
+  rename(landcover = land_cover)
 
 # Join dataframes
-slope_all <- left_join(slope_stats_df, slope_stack_lc_df, by = "land_cover")
+slope_all <- left_join(slope_stats_df, slope_bins_df, by = "landcover")
 
 # Clean up and rount stats
 slope_all_df <- slope_all %>% 
   # Round
   mutate(mean = round(mean, digits = 2),
          median = round(median, digits = 2),
-         area_km = round(area_km, digits = 0),
-         area_perc = round(area_perc, digits = 1),
-         "02" = round(X0_2, digits = 1),
-         "05" = round(X02_5, digits = 1),
-         "15" = round(X05_15, digits = 1),
-         "30" = round(X15_30, digits = 1),
-         "50" = round(X30_50, digits = 1),
-         "100" = round(X50_100, digits = 1)
+         max = round(max, digits = 2),
+         min = round(min, digits = 2),
+         count = round(count * 30 / 1000000, digits = 0),
+         "02" = round(X0...2, digits = 2),
+         "05" = round(X02....5, digits = 2),
+         "15" = round(X05...15, digits = 2),
+         "30" = round(X15...30, digits = 2),
+         "50" = round(X30...50, digits = 2),
+         "100" = round(X50...100, digits = 2)
                   ) %>% 
-  select(-X.y, -X0_2, -X02_5, -X05_15, -X15_30, -X30_50, -X50_100) %>% 
+  select(-X.y, -X0...2, -X02....5, -X05...15, -X15...30, -X30...50, -X50...100) %>% 
   
   # Rename landcover classes
+  filter(landcover != is.na(landcover) &
+         landcover != "18 Water") %>% 
   mutate(landcover = case_when(
-    land_cover == "1 Temperate or Subpolar Needleaf Forest" ~ "Temperate or Subpolar Needleaf Forest",
-    land_cover == "5 Temperate or Subpolar Broadleaf Deciduous Forest" ~ "Temperate or Subpolar Broadleaf Deciduous Forest",
-    land_cover == "6 Mixed Forest" ~ "Mixed Forest",
-    land_cover == "8 Temperate or Subpolar Shrubland" ~ "Temperate or Subpolar Shrubland",
-    land_cover == "10 Temperate or Subpolar Grassland" ~ "Temperate or Subpolar Grassland",
-    land_cover == "14 Wetland" ~ "Wetland",
-    land_cover == "15 Cropland" ~ "Cropland",
-    land_cover == "16 Barren Land" ~ "Barren Land",
-    land_cover == "17 Urban and Built-up" ~ "Urban and Built-up",
-    land_cover == "Overall" ~ "Overall"
-  )) 
-
+    landcover == "1 Temperate or Subpolar Needleaf Forest" ~ "Temperate or Subpolar Needleaf Forest",
+    landcover == "5 Temperate or Subpolar Broadleaf Deciduous Forest" ~ "Temperate or Subpolar Broadleaf Deciduous Forest",
+    landcover == "6 Mixed Forest" ~ "Mixed Forest",
+    landcover == "8 Temperate or Subpolar Shrubland" ~ "Temperate or Subpolar Shrubland",
+    landcover == "10 Temperate or Subpolar Grassland" ~ "Temperate or Subpolar Grassland",
+    landcover == "14 Wetland" ~ "Wetland",
+    landcover == "15 Cropland" ~ "Cropland",
+    landcover == "16 Barren Land" ~ "Barren Land",
+    landcover == "17 Urban and Built-up" ~ "Urban and Built-up",
+    landcover == "18 Water" ~ "Water"
+  )) %>% 
+  
+  arrange(desc(mean)) 
 
 
 
@@ -359,8 +296,7 @@ slope_all_df <- slope_all %>%
 slope_stats_df.ft <- flextable(slope_all_df,
                                 col_keys = c("landcover",
                                              "blank",
-                                             "area_km",
-                                             "area_perc",
+                                             "count",
                                              "mean",
                                              "median",
                                              "blank2",
@@ -376,16 +312,12 @@ slope_stats_df.ft <- flextable(slope_all_df,
   font(part = "all", fontname = "Calibri") %>% 
   fontsize(part = "all", size = 11) %>% 
   
-  align(align = "right", part = "body") %>%
+  align(align = "center", part = "all") %>%
   valign(valign = "center", part = "header") %>% 
   
-  align(align = "left", part = "header", j = "landcover") %>% 
   align(align = "left", j = "landcover") %>% 
   
-
-  
-  width(j = c("area_km",
-              "area_perc",
+  width(j = c("count",
               "mean",
               "median",
               "02",
@@ -393,26 +325,21 @@ slope_stats_df.ft <- flextable(slope_all_df,
               "15",
               "30",
               "50",
-              "100"), width = 0.7) %>% 
-  width(j = "landcover", width = 3.5) %>% 
-  
-  line_spacing(space = 1.8, part = "header") %>% 
+              "100"), width = 1) %>% 
+  width(j = "landcover", width = 3) %>% 
   
   bold(i = ~ landcover == "Temperate or Subpolar Broadleaf Deciduous Forest" |
-         landcover == "Mixed Forest" |
-         landcover == "Overall")
+         landcover == "Mixed Forest")
 
 
-# slope_stats_df.ft <- slope_stats_df.ft %>% 
-#   add_header_row(values = c("",
-#                             "Summary Stats",
-#                             "Slope Distribution (%)"),
-#                  colwidths = c(2, # adds up to total number of cols
-#                                5,
-#                                6
-#                                )
-#                  )
-
+slope_stats_df.ft <- slope_stats_df.ft %>% 
+  add_header_row(values = c("",
+                            "Summary Stats",
+                            "Slope Distribution (%)"),
+                 colwidths = c(2, # adds up to total number of cols
+                               4,
+                               6
+                               ))
 
 # Add percent signs to all slope values
 slope_stats_df.ft <- slope_stats_df.ft %>%
@@ -429,8 +356,7 @@ slope_stats_df.ft <- slope_stats_df.ft %>%
 slope_stats_df.ft <- slope_stats_df.ft %>% labelizor(
   part = "header", 
   labels = c("landcover" = "Landcover",
-             "area_km" = "Area (km²)",
-             "area_perc" = "Percent Area",
+             "count" = "Area (km^2)",
              "mean" = "Mean (%)",
              "median" = "Median (%)",
              "02" = "0 - 2%",
@@ -438,244 +364,21 @@ slope_stats_df.ft <- slope_stats_df.ft %>% labelizor(
              "15" = "5 - 15%",
              "30" = "15 - 30%",
              "50" = "30 - 50%",
-             "100" = "> 50%"
+             "100" = "50 - 100%"
   ))
 
 slope_stats_df.ft
 
 
 
-save_as_image(slope_stats_df.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_MS1/Figures/slope_stats_ft.svg")
-
-
 
 
 ##================================ RUSLE2 ================================
 
-rulse2_stats <- read.csv(hert("_analysis/rusle2-landcover-stats.csv"))
+rulse2_stats_df <- read.csv(hert("_analysis/_save/rusle2-landcover-stats.csv"))
 
 
 
-
-
-# Clean up and rount stats
-rulse2_stats_df <- rulse2_stats %>% 
-  # Round
-  mutate(mean = round(mean, digits = 2),
-         median = round(median, digits = 2),
-         sum = round(sum, digits = 0),
-         area_km = round(area_km, digits = 0),
-         area_perc = round(area_perc, digits = 1),
-         erosion_perc = round(erosion_perc, digits = 1)
-         ) %>% 
-  
-  # Rename landcover classes
-  mutate(landcover = case_when(
-    landcover.land_cover == "1 Temperate or Subpolar Needleaf Forest" ~ "Temperate or Subpolar Needleaf Forest",
-    landcover.land_cover == "5 Temperate or Subpolar Broadleaf Deciduous Forest" ~ "Temperate or Subpolar Broadleaf Deciduous Forest",
-    landcover.land_cover == "6 Mixed Forest" ~ "Mixed Forest",
-    landcover.land_cover == "8 Temperate or Subpolar Shrubland" ~ "Temperate or Subpolar Shrubland",
-    landcover.land_cover == "10 Temperate or Subpolar Grassland" ~ "Temperate or Subpolar Grassland",
-    landcover.land_cover == "14 Wetland" ~ "Wetland",
-    landcover.land_cover == "15 Cropland" ~ "Cropland",
-    landcover.land_cover == "16 Barren Land" ~ "Barren Land",
-    landcover.land_cover == "17 Urban and Built-up" ~ "Urban and Built-up",
-    landcover.land_cover == "Total" ~ "Overall"
-  ))
-
-
-
-# Add data and format table
-rulse2_stats_df.ft <- flextable(rulse2_stats_df,
-                               col_keys = c("landcover",
-                                            "blank",
-                                            "area_km",
-                                            "mean",
-                                            "median",
-                                            "sum",
-                                            "blank2",
-                                            "area_perc",
-                                            "erosion_perc"
-                               )) %>% 
-  empty_blanks() %>%
-  
-  font(part = "all", fontname = "Calibri") %>% 
-  fontsize(part = "all", size = 11) %>% 
-  
-  align(align = "right", part = "all") %>%
-  valign(valign = "center", part = "header") %>% 
-  
-  align(align = "left", part = "header", j = "landcover") %>% 
-  align(align = "left", j = "landcover") %>% 
-  
-  width(j = c("mean",
-              "median",
-              "area_km",
-              "area_perc",
-              "erosion_perc"), width = 0.75) %>% 
-  width(j = "landcover", width = 3.5) %>% 
-
-#  padding(padding = 6, part = "header") %>% 
-  line_spacing(space = 1.8, part = "header") %>% 
-  
-  bold(i = ~ landcover == "Temperate or Subpolar Broadleaf Deciduous Forest" |
-         landcover == "Mixed Forest") %>% 
-
-  bold(i = ~ landcover == "Overall")
-
-
-
-rulse2_stats_df.ft <- rulse2_stats_df.ft %>% labelizor(
-  part = "header", 
-  labels = c("landcover" = "Landcover",
-             "mean" = "Mean (t/ha/yr)",
-             "median" = "Median (t/ha/yr)",
-             "sum" = "Sum (t/ha/yr)",
-             "area_km" = "Area (km²)",
-             "area_perc" = "Percent Area",
-             "erosion_perc" = "Percent Erosion"
-  ))
-
-rulse2_stats_df.ft
-
-
-
-save_as_image(rulse2_stats_df.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_MS1/Figures/rulse2_stats_ft.svg")
-
-
-
-
-
-
-##================================ RUSLE2-Slope Stats ================================
-
-
-slope_stats_df <- read.csv(hert("_analysis/slope-landcover-stats.csv"))
-rulse2_stats <- read.csv(hert("_analysis/rusle2-landcover-stats.csv"))
-
-slope_rusle <- left_join(slope_stats_df, rulse2_stats, by = "landcover.land_cover")
-
-slope_rusle <- slope_rusle %>% 
-  # Round
-  mutate(
-    s_mean = round(mean.x, digits = 2),
-    s_median = round(median.x, digits = 2),
-    s_area_km = round(area_km.x, digits = 0),
-    s_area_perc = round(area_perc.x, digits = 1),
-    
-    e_mean = round(mean.y, digits = 2),
-    e_median = round(median.y, digits = 2),
-    e_sum = round(sum, digits = 0),
-    e_area_km = round(area_km.y, digits = 0),
-    e_area_perc = round(area_perc.y, digits = 1),
-    e_erosion_perc = round(erosion_perc, digits = 1)
-         
-  ) %>% 
-  
-  # Rename landcover classes
-  mutate(landcover = case_when(
-    landcover.land_cover == "1 Temperate or Subpolar Needleaf Forest" ~ "Temperate or Subpolar Needleaf Forest",
-    landcover.land_cover == "5 Temperate or Subpolar Broadleaf Deciduous Forest" ~ "Temperate or Subpolar Broadleaf Deciduous Forest",
-    landcover.land_cover == "6 Mixed Forest" ~ "Mixed Forest",
-    landcover.land_cover == "8 Temperate or Subpolar Shrubland" ~ "Temperate or Subpolar Shrubland",
-    landcover.land_cover == "10 Temperate or Subpolar Grassland" ~ "Temperate or Subpolar Grassland",
-    landcover.land_cover == "14 Wetland" ~ "Wetland",
-    landcover.land_cover == "15 Cropland" ~ "Cropland",
-    landcover.land_cover == "16 Barren Land" ~ "Barren Land",
-    landcover.land_cover == "17 Urban and Built-up" ~ "Urban and Built-up",
-    landcover.land_cover == "Overall" ~ "Overall"
-  ))
-
-
-
-
-
-
-
-
-# Add data and format table
-slope_rusle.ft <- flextable(slope_rusle,
-                            col_keys = c("landcover",
-                                         
-                                         "blank",
-                                         "s_mean",
-                                         "s_median",
-                                         
-                                         "blank2",
-                                         "e_mean",
-                                         "e_median",
-                                         "e_sum",
-                                         
-                                         "blank3",
-                                         "s_area_km",
-                                         "e_area_perc",
-                                         "e_erosion_perc"
-                            )) %>% 
-  empty_blanks() %>% 
-  
-  # All
-  font(part = "all", fontname = "Calibri") %>% 
-  fontsize(part = "all", size = 11) %>% 
-  align(align = "right", part = "all") %>%
-  
-  # Header
-  align(align = "center", part = "header") %>%
-  valign(valign = "center", part = "header") %>% 
-  
-  # Landcover
-  align(align = "left", part = "header", j = "landcover") %>% 
-  align(align = "left", j = "landcover") %>% 
-  
-  width(j = c("s_area_km",
-              "s_mean",
-              "s_median",
-              "e_mean",
-              "e_median",
-              "e_sum",
-              "e_area_perc",
-              "e_erosion_perc"), width = 0.75) %>% 
-  width(j = "landcover", width = 3.5) %>% 
-  
-  #  padding(padding = 6, part = "header") %>% 
-  line_spacing(space = 1.8, part = "header") %>% 
-  
-  bold(i = ~ landcover == "Temperate or Subpolar Broadleaf Deciduous Forest" |
-         landcover == "Mixed Forest") %>% 
-  
-  bold(i = ~ landcover == "Overall") %>% 
-    
-  # Add headers
-  add_header_row(values = c("",
-                            "",
-                            "Slope (%)",
-                            "",
-                            "Erosion (t/ha/yr)",
-                            ""),
-                 colwidths = c(1, # adds up to total number of cols
-                               1,
-                               2,
-                               1,
-                               2,
-                               5)
-                 ) %>% 
-
-  labelizor(
-    part = "header", 
-    labels = c("landcover" = "Landcover",
-               "s_mean" = "Mean",
-               "s_median" = "Median",
-               
-               "e_mean" = "Mean",
-               "e_median" = "Median",
-               "e_sum" = "Sum",
-               "s_area_km" = "Area (km²)",
-               
-               "e_area_perc" = "Percent Area",
-               "e_erosion_perc" = "Percent Erosion"
-    ))
-
-
-slope_rusle.ft
 
 
 
