@@ -300,13 +300,13 @@ slope_bins <- left_join(slope_stack_lc_df, slope_stack_slope_df, by = "land_cove
 slope_bins <- slope_bins %>% 
   # Round and rename
   mutate("X0_2.x" = round(X0_2.x, digits = 1),
-         "X02_5.x" = round(X05_15.x, digits = 1),
+         "X02_5.x" = round(X02_5.x, digits = 1),
          "X05_15.x" = round(X05_15.x, digits = 1),
          "X15_30.x" = round(X15_30.x, digits = 1),
          "X30_50.x" = round(X30_50.x, digits = 1),
          "X50_100.x" = round(X50_100.x, digits = 1),
          "X0_2.y" = round(X0_2.y, digits = 1),
-         "X02_5.y" = round(X05_15.y, digits = 1),
+         "X02_5.y" = round(X02_5.y, digits = 1),
          "X05_15.y" = round(X05_15.y, digits = 1),
          "X15_30.y" = round(X15_30.y, digits = 1),
          "X30_50.y" = round(X30_50.y, digits = 1),
@@ -437,7 +437,7 @@ slope_bins.ft
 
 
 
-save_as_image(slope_bins.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_MS1/Figures/slope_bins.ft.svg")
+save_as_image(slope_bins.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/slope_bins.ft.svg")
 
 
 

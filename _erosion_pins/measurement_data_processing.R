@@ -368,6 +368,10 @@ second.last <- pin.ls %>%
   mutate(dt = max(dayof) - min(dayof))
 
 
+
+
+
+
 # Divide up data
 # Create a list to hold plots
 plots <- vector(mode = "list", length = nforests)
@@ -382,11 +386,13 @@ for(i in 1:nforests) {
 
 
 
+
+
 # Fit lm's to each and plot
 for (i in 1:(nforests)){
 
   # Fit lm
-  lm.t <- lm(data = pin.list[[i]], mm ~ dayof * slope_pos - 1) # effects coding for model
+  lm.t <- lm(data = pin.list[[i]], mm ~ dayof * slope_pos - 1) # effects coding for model, add "- dayof"
 
   # Save coefficients
   coefs.t <- tidy(lm.t)
@@ -399,25 +405,51 @@ for (i in 1:(nforests)){
   }
 
 
+
+# Trim dataset - this code is for effects coding
+# H2_final_table <- lm.coefs %>% 
+#   arrange(forest) %>% 
+#   filter(term == "dayof:slope_posBS" | term == "dayof:slope_posFS") %>% 
+#   mutate(estimate = round((estimate * 365 / 10), digits = 3),
+#          std.error = round((std.error), digits = 3),
+#          p.value = round((p.value), digits = 5)) %>% 
+#   select(forest, term, estimate, std.error, p.value) %>% 
+#   pivot_wider(
+#     id_cols = forest,
+#     names_from = term,
+#     values_from = c(estimate, std.error, p.value)
+#   ) %>% 
+#   rename(slope_bs = "estimate_dayof:slope_posBS",
+#          SE_bs = "std.error_dayof:slope_posBS",
+#          p_bs = "p.value_dayof:slope_posBS",
+#          dslope_fs = "estimate_dayof:slope_posFS",
+#          SE_fs = "std.error_dayof:slope_posFS",
+#          p_fs = "p.value_dayof:slope_posFS")
+
+
+
 # Trim dataset
-H2_final_table <- lm.coefs %>% 
-  arrange(forest) %>% 
-  filter(term == "dayof" | term == "dayof:slope_posFS") %>% 
+H2_final_table <- lm.coefs %>%
+  arrange(forest) %>%
+  filter(term == "dayof" | term == "dayof:slope_posFS") %>%
   mutate(estimate = round((estimate * 365 / 10), digits = 3),
          std.error = round((std.error), digits = 3),
-         p.value = round((p.value), digits = 5)) %>% 
-  select(forest, term, estimate, std.error, p.value) %>% 
+         p.value = round((p.value), digits = 5)) %>%
+  select(forest, term, estimate, std.error, p.value) %>%
   pivot_wider(
     id_cols = forest,
     names_from = term,
     values_from = c(estimate, std.error, p.value)
-  ) %>% 
+  ) %>%
   rename(slope_bs = "estimate_dayof",
          SE_bs = "std.error_dayof",
          p_bs = "p.value_dayof",
          dslope_fs = "estimate_dayof:slope_posFS",
          SE_fs = "std.error_dayof:slope_posFS",
-         p_fs = "p.value_dayof:slope_posFS")
+         p_fs = "p.value_dayof:slope_posFS") %>% 
+  mutate( # Make footslope in same units as BS
+    dslope_fs = slope_bs + dslope_fs
+  )
 
 
 write_xlsx(H2_final_table, hert("_analysis/H2_final_table.xlsx"))
@@ -459,31 +491,34 @@ H3_final_table.df <- H3_final_table.df %>%
 
 
 
+
+
+
 # Add data and format table
 H3_mm_over_time.ft <- flextable(H3_final_table.df,
-                col_keys = c("forest",
-                             "slope_pos",
-                             "blank",
-                             "estimate_slope.1",
-                             "m_error_slope.1",
-                             #"p.value_slope.1",
-                             "blank1",
-                             "estimate_slope.2",
-                             "m_error_slope.2",
-                             #"p.value_slope.2",
-                             "blank2",
-                             "estimate_slope.3",
-                             "m_error_slope.3",
-                             #"p.value_slope.3",
-                             "blank3",
-                             "estimate_slope.4",
-                             "m_error_slope.4",
-                             #"p.value_slope.4",
-                             "blank4",
-                             "estimate_slope.5",
-                             "m_error_slope.5"
-                             #"p.value_slope.5"))
-                             ))%>% 
+                                col_keys = c("forest",
+                                             "slope_pos",
+                                             "blank",
+                                             "estimate_slope.1",
+                                             "m_error_slope.1",
+                                             #"p.value_slope.1",
+                                             "blank1",
+                                             "estimate_slope.2",
+                                             "m_error_slope.2",
+                                             #"p.value_slope.2",
+                                             "blank2",
+                                             "estimate_slope.3",
+                                             "m_error_slope.3",
+                                             #"p.value_slope.3",
+                                             "blank3",
+                                             "estimate_slope.4",
+                                             "m_error_slope.4",
+                                             #"p.value_slope.4",
+                                             "blank4",
+                                             "estimate_slope.5",
+                                             "m_error_slope.5"
+                                             #"p.value_slope.5"))
+                                ))%>% 
   empty_blanks() %>%
   
   font(part = "all", fontname = "Calibri") %>% 
@@ -492,16 +527,45 @@ H3_mm_over_time.ft <- flextable(H3_final_table.df,
   align(align = "center", part = "all") %>% 
   valign(valign = "center", part = "header") %>% 
   
-  add_footer_lines("* indicates signifgance to p < 0.05")
-
-# * all significant values
-H3_mm_over_time.ft <- H3_mm_over_time.ft %>% 
+  add_footer_lines("* indicates signifgance to p < 0.05") %>% 
+  
+  # All
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  align(align = "right", part = "all") %>%
+  
+  # Header
+  align(align = "center", part = "header") %>%
+  valign(valign = "center", part = "header") %>% 
+  
+  width(j = c("forest",
+              "slope_pos",
+              "estimate_slope.1",
+              "m_error_slope.1",
+              "estimate_slope.2",
+              "m_error_slope.2",
+              "estimate_slope.3",
+              "m_error_slope.3",
+              "estimate_slope.4",
+              "m_error_slope.4",
+              "estimate_slope.5",
+              "m_error_slope.5"), width = 0.7) %>% 
+  #width(j = "landcover", width = 3.5) %>% 
+  
+  line_spacing(space = 1.8, part = "header") %>% 
+  
+  # Landcover
+  #align(align = "left", part = "center", j = "landcover") %>% 
+  #align(align = "left", j = "landcover") %>% 
+  
+  
+  # * all significant values
   mk_par(j = "estimate_slope.1",
          i = ~ p.value_slope.1 < 0.05,
          value = as_paragraph(
            estimate_slope.1,
            "*"
-           )) %>% 
+         )) %>% 
   mk_par(j = "estimate_slope.2",
          i = ~ p.value_slope.2 < 0.05,
          value = as_paragraph(
@@ -525,19 +589,15 @@ H3_mm_over_time.ft <- H3_mm_over_time.ft %>%
          value = as_paragraph(
            estimate_slope.5,
            "*"
-         )) 
-
-# Color erosion values
-
-H3_mm_over_time.ft <- H3_mm_over_time.ft %>% 
+         )) %>% 
+  
+  # Color erosion values
   color(~ estimate_slope.1 < 0, color = "red2", j = "estimate_slope.1") %>% 
   color(~ estimate_slope.2 < 0, color = "red2", j = "estimate_slope.2") %>% 
   color(~ estimate_slope.3 < 0, color = "red2", j = "estimate_slope.3") %>% 
   color(~ estimate_slope.4 < 0, color = "red2", j = "estimate_slope.4") %>% 
-  color(~ estimate_slope.5 < 0, color = "red2", j = "estimate_slope.5")
-
-
-H3_mm_over_time.ft <- H3_mm_over_time.ft %>% 
+  color(~ estimate_slope.5 < 0, color = "red2", j = "estimate_slope.5") %>% 
+  
   add_header_row(values = c("",
                             "Period 1",
                             "Period 2",
@@ -549,30 +609,36 @@ H3_mm_over_time.ft <- H3_mm_over_time.ft %>%
                                3,
                                3,
                                3,
-                               3))
-
-H3_mm_over_time.ft <- H3_mm_over_time.ft %>% labelizor(
-  part = "header", 
-  labels = c("forest" = "Site",
-             "slope_pos" = "Slope Position",
-             "estimate_slope.1" = "Erosion (cm/yr)",
-             "m_error_slope.1" = "Error (+/-)",
-             #"p.value_slope.1" = "p-value",
-             "estimate_slope.2" = "Erosion (cm/yr)",
-             "m_error_slope.2" = "Error (+/-)",
-             #"p.value_slope.2" = "p-value",
-             "estimate_slope.3" = "Erosion (cm/yr)",
-             "m_error_slope.3" = "Error (+/-)",
-             #"p.value_slope.3" = "p-value",
-             "estimate_slope.4" = "Erosion (cm/yr)",
-             "m_error_slope.4" = "Error (+/-)",
-             #"p.value_slope.4" = "p-value",
-             "estimate_slope.5" = "Erosion (cm/yr)",
-             "m_error_slope.5" = "Error (+/-)"
-             #"p.value_slope.5" = "p-value"
-  ))
+                               3)) %>% 
+  
+  labelizor(
+    part = "header", 
+    labels = c("forest" = "Site",
+               "slope_pos" = "Slope Position",
+               "estimate_slope.1" = "Erosion (cm/yr)",
+               "m_error_slope.1" = "Error (+/-)",
+               #"p.value_slope.1" = "p-value",
+               "estimate_slope.2" = "Erosion (cm/yr)",
+               "m_error_slope.2" = "Error (+/-)",
+               #"p.value_slope.2" = "p-value",
+               "estimate_slope.3" = "Erosion (cm/yr)",
+               "m_error_slope.3" = "Error (+/-)",
+               #"p.value_slope.3" = "p-value",
+               "estimate_slope.4" = "Erosion (cm/yr)",
+               "m_error_slope.4" = "Error (+/-)",
+               #"p.value_slope.4" = "p-value",
+               "estimate_slope.5" = "Erosion (cm/yr)",
+               "m_error_slope.5" = "Error (+/-)"
+               #"p.value_slope.5" = "p-value"
+    ))
 
 H3_mm_over_time.ft
+
+# For ARB
+save_as_image(H3_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/ARB_H3_mm_over_time.ft.svg")
+
+# For LR
+save_as_image(H3_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/Par_H3_mm_over_time.ft.svg")
 
 
 
@@ -596,7 +662,7 @@ H2_mm_over_time.ft <- flextable(H2_final_table.filter,
                                              "blank",
                                              "SE_bs",
                                              "SE_fs"
-                                             )) %>% 
+                                )) %>% 
   empty_blanks() %>%
   
   font(part = "all", fontname = "Calibri") %>% 
@@ -607,11 +673,27 @@ H2_mm_over_time.ft <- flextable(H2_final_table.filter,
   
   padding(part = "all", padding = 3) %>% 
   
-  add_footer_lines("* Indicates signifgance to p < 0.05. Estimates for the backslope are evaluate as signifigantly different than zero. Estimates for the footslope are evaluated as signifigantly different than the backslope.")
-
-
-# * all significant values
-H2_mm_over_time.ft <- H2_mm_over_time.ft %>% 
+  # All
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  align(align = "right", part = "all") %>%
+  
+  # Header
+  align(align = "center", part = "header") %>%
+  valign(valign = "center", part = "header") %>% 
+  
+  width(j = c("forest",
+              "slope_bs",
+              "dslope_fs",
+              "SE_bs",
+              "SE_fs"), width = 0.75) %>% 
+  
+  line_spacing(space = 1.8, part = "header") %>% 
+  
+  add_footer_lines("* Indicates signifigance to p < 0.05. Estimates for the backslope are evaluate as signifigantly different than zero. Estimates for the footslope are evaluated as signifigantly different than the backslope.") %>% 
+  
+  
+  # * all significant values
   mk_par(j = "slope_bs",
          i = ~ p_bs < 0.05,
          value = as_paragraph(
@@ -623,20 +705,21 @@ H2_mm_over_time.ft <- H2_mm_over_time.ft %>%
          value = as_paragraph(
            dslope_fs,
            "*"
-         ))
-
-
-H2_mm_over_time.ft <- H2_mm_over_time.ft %>% labelizor(
-  part = "header", 
-  labels = c("forest" = "Site",
-             "slope_bs" = "BS Slope (cm/yr)",
-             "dslope_fs" = "FS Slope (Δ cm/yr)",
-             "SE_bs" = "BS SE",
-             "SE_fs" = "FS SE"
-  ))
+         )) %>% 
+  
+  labelizor(
+    part = "header", 
+    labels = c("forest" = "Site",
+               "slope_bs" = "BS Erosion (cm/yr)",
+               "dslope_fs" = "FS Erosion (cm/yr)",
+               "SE_bs" = "BS SE",
+               "SE_fs" = "FS SE"
+    ))
 
 
 H2_mm_over_time.ft
+
+save_as_image(H2_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/H2_mm_over_time.ft.svg")
 
 #================================ Plotting ================================
 
