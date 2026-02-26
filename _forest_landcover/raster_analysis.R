@@ -207,7 +207,7 @@ tibble(slope_stats) # print, data is in tonnes per hectare
 
 
 
-##================================ Binned by LC ================================
+##================================ Bins ================================
 
 # input the raster needed
 landcover.int <- landcover # landcover is also needed
@@ -218,10 +218,12 @@ raster.in <- slope # call slope raster
 # define slope bins & create a maxtrix of the bin distribtions
 bins <- data.frame(A = c(0, 2, 5, 15, 30, 50), # "left" bin side
                    B = c(2, 5, 15, 30, 50, 100), # "right" bin side
-                   C = c(1, 2, 3, 4, 5, 6))
+                   C = c(1, 2, 3, 4, 5, 6)) 3 # bind IDs
 slope.bins <- as.matrix(bins)
 
 slope.binned <- classify(raster.in, slope.bins) # apply bins to slope raster
+
+
 
 # apply proper slope bin titles
 slope.cats <- data.frame(
@@ -230,8 +232,9 @@ slope.cats <- data.frame(
 )
 levels(slope.binned) <- slope.cats # Associate the data frame with the raster
 
+###================================ LC ================================
 
-# tabulate area - how many unique combinations are there, and how many cells are in each?
+# tabulate area - how many unique combinations are there, and how many cells are in each
 stack <- c(landcover, slope.binned) # stack land cover and binned slope raseters
 stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
 
@@ -282,9 +285,10 @@ tibble(stack_lc)
 
 
 
+###================================ RUSLE2 ================================
 
-
-
+stack <- c(rusle2, slope.binned) # stack land cover and binned slope raseters
+stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
 
 
 #================================ Pub Tables ================================
