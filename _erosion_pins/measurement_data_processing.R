@@ -265,7 +265,7 @@ coefs.list <- coefs.list
 # keep all statistics & pivot
 coefs.wide <- coefs.list %>%
   mutate(estimate = round((estimate * 365 / 10), digits = 3)) %>% # compute erosion in cm/yr, round to 0.001 cm
-  mutate(m_error = round((m_error * 365 / 10), digits = 3)) %>% # compute margin in cm/yr , round to 0.001 cm
+  mutate(std.error = round((std.error * 365 / 10), digits = 3)) %>% # compute margin in cm/yr , round to 0.001 cm
   mutate(p.value = round(p.value, digits = 3)) %>% 
   mutate(term = case_when(
     term == "(Intercept)" ~ "intercept",
@@ -301,19 +301,19 @@ H3_final_table <- coefs.wide %>%
   select(forest,
          slope_pos,
          estimate_slope.1,
-         m_error_slope.1,
+         std.error_slope.1,
          p.value_slope.1,
          estimate_slope.2,
-         m_error_slope.2,
+         std.error_slope.2,
          p.value_slope.2,
          estimate_slope.3,
-         m_error_slope.3,
+         std.error_slope.3,
          p.value_slope.3,
          estimate_slope.4,
-         m_error_slope.4,
+         std.error_slope.4,
          p.value_slope.4,
          estimate_slope.5,
-         m_error_slope.5,
+         std.error_slope.5,
          p.value_slope.5) %>%
   arrange(forest, slope_pos)
 print(H3_final_table, n = 27)
@@ -396,6 +396,11 @@ for (i in 1:(nforests)){
 
   # Save coefficients
   coefs.t <- tidy(lm.t)
+  inter <- data.frame(confint(lm.t)) %>%   # grab margin of errors
+    mutate(m_error = (X97.5.. - X2.5..) / 2)
+
+  coefs.t$m_error = inter$m_error # combine estimates with margin
+  
   coefs.t$forest = unique(pin.list[[i]]$forest)
 
   ifelse(i == 1,
@@ -406,35 +411,20 @@ for (i in 1:(nforests)){
 
 
 
-# Trim dataset - this code is for effects coding
-# H2_final_table <- lm.coefs %>% 
-#   arrange(forest) %>% 
-#   filter(term == "dayof:slope_posBS" | term == "dayof:slope_posFS") %>% 
-#   mutate(estimate = round((estimate * 365 / 10), digits = 3),
-#          std.error = round((std.error), digits = 3),
-#          p.value = round((p.value), digits = 5)) %>% 
-#   select(forest, term, estimate, std.error, p.value) %>% 
-#   pivot_wider(
-#     id_cols = forest,
-#     names_from = term,
-#     values_from = c(estimate, std.error, p.value)
-#   ) %>% 
-#   rename(slope_bs = "estimate_dayof:slope_posBS",
-#          SE_bs = "std.error_dayof:slope_posBS",
-#          p_bs = "p.value_dayof:slope_posBS",
-#          dslope_fs = "estimate_dayof:slope_posFS",
-#          SE_fs = "std.error_dayof:slope_posFS",
-#          p_fs = "p.value_dayof:slope_posFS")
-
 
 
 # Trim dataset
 H2_final_table <- lm.coefs %>%
   arrange(forest) %>%
   filter(term == "dayof" | term == "dayof:slope_posFS") %>%
+  
+  # Round values
   mutate(estimate = round((estimate * 365 / 10), digits = 3),
-         std.error = round((std.error), digits = 3),
-         p.value = round((p.value), digits = 5)) %>%
+         std.error = round((std.error * 365 / 10), digits = 3),
+         p.value = round((p.value), digits = 5),
+         m_error = round((m_error * 365 / 10), digits =3)) %>%
+  
+  # Selected only wanted columns
   select(forest, term, estimate, std.error, p.value) %>%
   pivot_wider(
     id_cols = forest,
@@ -442,10 +432,10 @@ H2_final_table <- lm.coefs %>%
     values_from = c(estimate, std.error, p.value)
   ) %>%
   rename(slope_bs = "estimate_dayof",
-         SE_bs = "std.error_dayof",
+         ME_bs = "std.error_dayof",
          p_bs = "p.value_dayof",
          dslope_fs = "estimate_dayof:slope_posFS",
-         SE_fs = "std.error_dayof:slope_posFS",
+         ME_fs = "std.error_dayof:slope_posFS",
          p_fs = "p.value_dayof:slope_posFS") %>% 
   mutate( # Make footslope in same units as BS
     dslope_fs = slope_bs + dslope_fs
@@ -454,6 +444,91 @@ H2_final_table <- lm.coefs %>%
 
 write_xlsx(H2_final_table, hert("_analysis/H2_final_table.xlsx"))
 
+
+
+
+##================================ Back of Envelope  ================================
+
+# Get erosion pin mean data
+envelope <- H2_final_table %>% 
+  select(forest, slope_bs, ME_bs)
+
+# Pull Bd data
+baumann <- read_excel(hert("Baument-et-al_BD-values.xlsx"), sheet = "DataTAB") # ARB and LR data
+baumann_df <- baumann %>% 
+  filter(Depth_cm == "0-5") %>% 
+  group_by(Worm_Type) %>% 
+  summarise(Bd_mean = mean(`Bulk_Density (g/cm^3)`),
+            Bd_se = sd(`Bulk_Density (g/cm^3)`) / length(`Bulk_Density (g/cm^3)`))
+
+
+
+# Compute weighted mean of erosion for each 'case'
+envelope1 <- envelope %>%
+  # Create classes
+  mutate(case = case_when(
+    forest == "LRE" ~ "ew_low",
+    forest == "IH" ~ "ew_low",
+    forest == "LRW" ~ "ew_high",
+    forest == "ASH" ~ "ew_high",
+    forest == "LME" ~ "ew_high",
+    forest == "RCE" ~ "ew_high",
+    forest == "PLH" ~ "jw_low",
+    forest == "NH" ~ "jw_low",
+    forest == "LRJ" ~ "jw_high",
+    forest == "MAG" ~ "jw_high",
+    forest == "WD" ~ "jw_high",
+    forest == "RCJ" ~ "jw_high",
+    forest == "LMJ" ~ "jw_high"
+  )) %>% 
+  
+  # Compute weighted mean for each case
+  mutate(weight = 1 / ME_bs ^ 2,
+         w_value = weight * slope_bs) %>% 
+  
+  
+  group_by(case) %>% 
+  summarize(dzdt_wmean = sum(w_value)/ sum(weight),
+            dzdt_wse = sqrt(1 / sum(weight))) %>% 
+  ungroup()
+
+
+# Merge erosion and Bd dataframes
+# Add an index row
+envelope2 <- envelope1 %>%
+  mutate(Worm_Type = case_when(
+    case %in% c("ew_high", "ew_low") ~ "L",
+    TRUE ~ "A"   # or whatever mapping you want for the others
+  )) %>% 
+  
+  left_join(baumann_df, by = "Worm_Type") %>% 
+  select(-Worm_Type)
+
+
+# Compute erosion in g/cm2/yr, propgating error.
+envelope3 <- envelope2 %>% 
+  mutate(
+    g_cm2 = dzdt_wmean * Bd_mean,
+    g_cm2_se = sqrt(
+      (Bd_mean^2) * (dzdt_wse^2) +
+        (dzdt_wmean^2) * (Bd_se^2)
+    )
+  )
+
+
+# Compute erosion in t/ha/yr
+envelope4 <- envelope3 %>% 
+  mutate(t_ha = g_cm2 * 10,
+         t_ha_se = g_cm2_se * 10, 
+         t_ha_yr = t_ha * 3 / 12, # Adjusted for yearly total, considering intensity of erosion July - Sept
+         t_ha_yr_se = t_ha_se * 3 / 12)
+
+tibble(envelope4)
+
+envelope4 %>% 
+  mutate(x = area_km)
+
+#' [WIP HERE]
 
 #================================ Pub Tables ================================
 
@@ -500,23 +575,23 @@ H3_mm_over_time.ft <- flextable(H3_final_table.df,
                                              "slope_pos",
                                              "blank",
                                              "estimate_slope.1",
-                                             "m_error_slope.1",
+                                             "std.error_slope.1",
                                              #"p.value_slope.1",
                                              "blank1",
                                              "estimate_slope.2",
-                                             "m_error_slope.2",
+                                             "std.error_slope.2",
                                              #"p.value_slope.2",
                                              "blank2",
                                              "estimate_slope.3",
-                                             "m_error_slope.3",
+                                             "std.error_slope.3",
                                              #"p.value_slope.3",
                                              "blank3",
                                              "estimate_slope.4",
-                                             "m_error_slope.4",
+                                             "std.error_slope.4",
                                              #"p.value_slope.4",
                                              "blank4",
                                              "estimate_slope.5",
-                                             "m_error_slope.5"
+                                             "std.error_slope.5"
                                              #"p.value_slope.5"))
                                 ))%>% 
   empty_blanks() %>%
@@ -527,7 +602,6 @@ H3_mm_over_time.ft <- flextable(H3_final_table.df,
   align(align = "center", part = "all") %>% 
   valign(valign = "center", part = "header") %>% 
   
-  add_footer_lines("* indicates signifgance to p < 0.05") %>% 
   
   # All
   font(part = "all", fontname = "Calibri") %>% 
@@ -541,15 +615,15 @@ H3_mm_over_time.ft <- flextable(H3_final_table.df,
   width(j = c("forest",
               "slope_pos",
               "estimate_slope.1",
-              "m_error_slope.1",
+              "std.error_slope.1",
               "estimate_slope.2",
-              "m_error_slope.2",
+              "std.error_slope.2",
               "estimate_slope.3",
-              "m_error_slope.3",
+              "std.error_slope.3",
               "estimate_slope.4",
-              "m_error_slope.4",
+              "std.error_slope.4",
               "estimate_slope.5",
-              "m_error_slope.5"), width = 0.7) %>% 
+              "std.error_slope.5"), width = 0.7) %>% 
   #width(j = "landcover", width = 3.5) %>% 
   
   line_spacing(space = 1.8, part = "header") %>% 
@@ -591,6 +665,16 @@ H3_mm_over_time.ft <- flextable(H3_final_table.df,
            "*"
          )) %>% 
   
+  # Add +/- to errors
+  set_formatter(
+    m_error_slope.1  = function(x) ifelse(x != 0, paste0("± ", x, "")),
+    m_error_slope.2  = function(x) ifelse(x != 0, paste0("± ", x, "")),
+    m_error_slope.3  = function(x) ifelse(x != 0, paste0("± ", x, "")),
+    m_error_slope.4  = function(x) ifelse(x != 0, paste0("± ", x, "")),
+    m_error_slope.5  = function(x) ifelse(x != 0, paste0("± ", x, ""))
+  ) %>% 
+  
+  
   # Color erosion values
   color(~ estimate_slope.1 < 0, color = "red2", j = "estimate_slope.1") %>% 
   color(~ estimate_slope.2 < 0, color = "red2", j = "estimate_slope.2") %>% 
@@ -616,19 +700,19 @@ H3_mm_over_time.ft <- flextable(H3_final_table.df,
     labels = c("forest" = "Site",
                "slope_pos" = "Slope Position",
                "estimate_slope.1" = "Erosion (cm/yr)",
-               "m_error_slope.1" = "Error (+/-)",
+               "std.error_slope.1" = "Std. Error",
                #"p.value_slope.1" = "p-value",
                "estimate_slope.2" = "Erosion (cm/yr)",
-               "m_error_slope.2" = "Error (+/-)",
+               "std.error_slope.2" = "Std. Error",
                #"p.value_slope.2" = "p-value",
                "estimate_slope.3" = "Erosion (cm/yr)",
-               "m_error_slope.3" = "Error (+/-)",
+               "std.error_slope.3" = "Std. Error",
                #"p.value_slope.3" = "p-value",
                "estimate_slope.4" = "Erosion (cm/yr)",
-               "m_error_slope.4" = "Error (+/-)",
+               "std.error_slope.4" = "Std. Error",
                #"p.value_slope.4" = "p-value",
                "estimate_slope.5" = "Erosion (cm/yr)",
-               "m_error_slope.5" = "Error (+/-)"
+               "std.error_slope.5" = "Std. Error"
                #"p.value_slope.5" = "p-value"
     ))
 
@@ -637,7 +721,7 @@ H3_mm_over_time.ft
 # For ARB
 save_as_image(H3_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/ARB_H3_mm_over_time.ft.svg")
 
-# For LR
+# For Par
 save_as_image(H3_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/Par_H3_mm_over_time.ft.svg")
 
 
@@ -647,21 +731,16 @@ save_as_image(H3_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Docum
 
 ##================================ H2 ================================
 
-H2_final_table.filter <- H2_final_table %>% 
-  filter(forest == "ASH" |
-           forest == "LRE" |
-           forest == "LRW" |
-           forest == "MAG" |
-           forest == "WD" |
-           forest == "LRJ")
+H2_final_table.filter <- H2_final_table
 
 H2_mm_over_time.ft <- flextable(H2_final_table.filter,
                                 col_keys = c("forest",
                                              "slope_bs",
-                                             "dslope_fs",
+                                             "ME_bs",
+                                             
                                              "blank",
-                                             "SE_bs",
-                                             "SE_fs"
+                                             "dslope_fs",
+                                             "ME_fs"
                                 )) %>% 
   empty_blanks() %>%
   
@@ -685,13 +764,21 @@ H2_mm_over_time.ft <- flextable(H2_final_table.filter,
   width(j = c("forest",
               "slope_bs",
               "dslope_fs",
-              "SE_bs",
-              "SE_fs"), width = 0.75) %>% 
+              "ME_bs",
+              "ME_fs"), width = 0.75) %>% 
   
   line_spacing(space = 1.8, part = "header") %>% 
   
-  add_footer_lines("* Indicates signifigance to p < 0.05. Estimates for the backslope are evaluate as signifigantly different than zero. Estimates for the footslope are evaluated as signifigantly different than the backslope.") %>% 
   
+  # Color JW sites maroon
+  
+  color(~ forest == "MAG" | 
+          forest ==  "WD" | 
+          forest ==  "LRJ" | 
+          forest ==  "RCJ" | 
+          forest ==  "PLH" | 
+          forest ==  "NH"|
+          forest ==  "RCJ", color = "firebrick2", j = "forest") %>% 
   
   # * all significant values
   mk_par(j = "slope_bs",
@@ -707,13 +794,19 @@ H2_mm_over_time.ft <- flextable(H2_final_table.filter,
            "*"
          )) %>% 
   
+  # Add +/- to errors
+  # set_formatter(
+  #   ME_bs  = function(x) paste0("± ", x),
+  #   ME_fs  = function(x) paste0("± ", x)
+  # ) %>% 
+  
   labelizor(
     part = "header", 
     labels = c("forest" = "Site",
                "slope_bs" = "BS Erosion (cm/yr)",
                "dslope_fs" = "FS Erosion (cm/yr)",
-               "SE_bs" = "BS SE",
-               "SE_fs" = "FS SE"
+               "ME_bs" = "Std. Error",
+               "ME_fs" = "Std. Error"
     ))
 
 
