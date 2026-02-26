@@ -1,7 +1,7 @@
 #================================ Setup ================================
 
 # libraries needed
-libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco", "rasterVis", "raster", "elevatr", "mapview", "leaflet", "tmap", "RColorBrewer", "exactextractr", "emmeans", "lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom", "flextable", "officer")
+libs <- c("tidyverse", "lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco", "rasterVis", "raster", "elevatr", "mapview", "leaflet", "tmap", "RColorBrewer", "exactextractr", "emmeans", "lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom", "flextable", "officer")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -105,109 +105,12 @@ plot(rusle2)
 # states.84 <- st_as_sf(states) %>% st_transform(crs = 4326)
 
 
-#================================ RUSLE2 ================================
-
-##================================ Summary Stats ================================
-# Calculate a quick mean, median, max, and min for each land cover
 
 
-# input the raster needed for statics here
-landcover.int <- landcover # call landcover
-raster.in <- rusle2 # call rusle2 raster
-
-levels(landcover.int)
-
-# Compute statistics
-rusle_mean <- terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2]
-rusle_median <- terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2]
-rusle_sum <- terra::zonal(raster.in, landcover.int, "sum", na.rm = TRUE)[,2]
-rusle_area <- terra::zonal(cellSize(landcover.int, unit="km"),
-                    landcover.int, fun="sum")[,2]
+#================================ Processing ================================
 
 
-# # Global (total) stats
-# g_rusle_mean <- terra::global(raster.in, "mean", na.rm = TRUE)[,1]
-# g_rusle_median <- NA #terra::global(raster.in, "median", na.rm = TRUE)[,1] # doesn't work
-# g_rusle_sum <- terra::global(raster.in, "sum", na.rm = TRUE)[,1]
-# g_rusle_area <- terra::global(cellSize(landcover.int, unit="km"),
-#                     landcover.int, fun = "sum")[,1]
-
-
-# Build summary df
-rusle_stats <- data.frame("landcover" = levels(landcover.int),
-                          "mean" = rusle_mean[1:11], 
-                          "median" = rusle_median[1:11],
-                          "sum" = rusle_sum[1:11],
-                          "area_km" = rusle_area[1:11]) %>% # number of cells per class
-  filter(landcover.ID != 0 &
-           landcover.ID != 18) %>% # remove NA and water before doing percentages
-  
-  mutate("area_perc" = area_km / sum(area_km) * 100, # percent of area each landcover is responsible for
-         "erosion_perc" = sum / sum(sum) * 100)  # percent of erosion each landcover is responsible for
-
-# Add totals row
-rusle_stats <- rusle_stats %>%
-  add_row(landcover.land_cover = "Total", mean = mean(rusle_stats$mean), sum = sum(rusle_stats$sum), area_km = sum(rusle_stats$area_km)) # Add totals row
-
-
-tibble(rusle_stats) # print, data is in tonnes per hectare
-
-
-
-#write.csv(rusle_stats, hert("_analysis/rusle2-landcover-stats.csv")) # export to excel
-
-
-
-
-#================================ Slope ================================
-
-##================================ Summary Stats ================================
-# calculate a quick mean, median, max, and min for each land cover
-
-
-# input the raster needed for statics here
-landcover.int <- landcover # landcover is also needed
-raster.in <- slope # call slope raster
-
-
-# Compute statistics
-slope_mean <- terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2]
-slope_median <- terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2]
-slope_area <- zonal(cellSize(landcover.int, unit="km"),
-                    landcover.int, fun="sum")[,2]
-
-
-
-# Global (total) stats
-g_slope_mean <- terra::global(raster.in, "mean", na.rm = TRUE)[,1]
-g_slope_median <- NA #terra::global(raster.in, "median", na.rm = TRUE)[,1] # doesn't work
-g_slope_area <- terra::global(cellSize(landcover.int, unit="km"),
-                              landcover.int, fun = "sum")[,1]
-
-
-# Build summary df
-slope_stats <- data.frame("landcover" = levels(landcover.int),
-                          "mean" = slope_mean[1:11], 
-                          "median" = slope_median[1:11],
-                          "area_km" = slope_area[1:11]) %>% # number of cells per class
-  filter(landcover.ID != 0 &
-           landcover.ID != 18) %>% # Remove NA cells prior to area calculations
-  
-  mutate("area_perc" = area_km / sum(area_km) * 100)  # percent of area each landcover is responsible for
-
-# Add totals row
-slope_stats <- slope_stats %>%
-  add_row(landcover.land_cover = "Overall", mean = mean(slope_stats$mean), area_km = sum(slope_stats$area_km)) # Add totals row
-
-
-tibble(slope_stats) # print, data is in tonnes per hectare
-
-
-#write.csv(slope_stats, hert("_analysis/slope-landcover-stats.csv")) # export to excel
-
-
-
-##================================ Bins ================================
+##================================ Build Slope Bins ================================
 
 # input the raster needed
 landcover.int <- landcover # landcover is also needed
@@ -218,7 +121,7 @@ raster.in <- slope # call slope raster
 # define slope bins & create a maxtrix of the bin distribtions
 bins <- data.frame(A = c(0, 2, 5, 15, 30, 50), # "left" bin side
                    B = c(2, 5, 15, 30, 50, 100), # "right" bin side
-                   C = c(1, 2, 3, 4, 5, 6)) 3 # bind IDs
+                   C = c(1, 2, 3, 4, 5, 6))  # bind IDs
 slope.bins <- as.matrix(bins)
 
 slope.binned <- classify(raster.in, slope.bins) # apply bins to slope raster
@@ -231,8 +134,6 @@ slope.cats <- data.frame(
   slope_class = c("0_2", "02_5", "05_15", "15_30", "30_50", "50_100")
 )
 levels(slope.binned) <- slope.cats # Associate the data frame with the raster
-
-###================================ LC ================================
 
 # tabulate area - how many unique combinations are there, and how many cells are in each
 stack <- c(landcover, slope.binned) # stack land cover and binned slope raseters
@@ -261,12 +162,19 @@ stack_slope <- stack.sum %>%
   pivot_wider(names_from = slope_class,
               values_from = slope_frac)
 
+
+#' [compute mean slope for each landcover ]
+slope_mean <- terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2]
+
+
 # Pivot df for landcover percent breakdown
 stack_lc <- stack.sum %>%
   select(-n, -nsum) %>% 
   pivot_wider(names_from = slope_class,
               values_from = lc_frac) %>% 
-  add_row(land_cover = "Overall",
+  mutate(mean_slope = slope_mean[2:10]) %>% 
+
+    add_row(land_cover = "Overall",
           `0_2` = slope_totals[1,4],
           `02_5` = slope_totals[2,4],
           `05_15` = slope_totals[3,4],
@@ -274,21 +182,138 @@ stack_lc <- stack.sum %>%
           `30_50` = slope_totals[5,4],
           `50_100` = slope_totals[6,4],) # Add total row
 
+
+
+
 # Visualize
 tibble(stack_slope)
 tibble(stack_lc)
 
+
 # export
-# write.csv(stack_slope, hert("_analysis/slope-stack_slope.csv")) # export clean table for manuscript
-# write.csv(stack_lc, hert("_analysis/slope-stack_lc.csv")) # export df to plot later
+write.csv(stack_slope, hert("_analysis/02-26_stack_slopeBylandcover.csv")) # export clean table for manuscript
+write.csv(stack_lc, hert("_analysis/02-26_stack_landcoverBySlope.csv")) # export df to plot later
 
 
 
 
-###================================ RUSLE2 ================================
+##================================ Two-way Mean ================================
 
-stack <- c(rusle2, slope.binned) # stack land cover and binned slope raseters
-stack.area <- terra::crosstab(stack, long = TRUE, useNA = TRUE) # tabulate
+# Import data
+slopebins <- slope.binned
+lc <- landcover
+erosion <- rusle2
+
+# Create a combined category raster. This encodes each landcover × slope combination uniquely.
+multiplex <- lc * 1000 + slopebins # Creat a raster with a uniqe ID for each slope class - landcover combo
+names(multiplex) <- "multiplex"
+
+
+# Compute MEAN erosion value of each slope-landcover combo
+two_way_mean <- zonal(erosion, multiplex, fun = "mean", na.rm = TRUE) # I think the na.rm here drops the NA landcover and water
+
+# Seperate out multiplex
+mtwo_way <- two_way_mean %>% 
+  mutate(
+    landcover   = multiplex %/% 1000,
+    slope_class = multiplex %% 1000
+  ) %>% 
+  rename(mean_erosion = GL_RUSLE2_30m_raster_r)
+
+# Pivot
+mtwo_way_wide <- mtwo_way %>% 
+  select(-multiplex) %>% 
+  arrange(landcover, slope_class) %>%
+  pivot_wider(
+    names_from = slope_class,
+    values_from = mean_erosion,
+    names_prefix = "slope_"
+  )
+
+# Calculate the overall mean for each slope class 
+rs_mean <- terra::zonal(erosion, slopebins, "mean", na.rm = TRUE)[,2]
+
+# Calculate the overall mean for each land cover class
+rl_mean <- terra::zonal(erosion, lc, "mean", na.rm = TRUE)[,2]
+
+# Combine two way table with means
+final_mtwoway <- mtwo_way_wide %>% 
+  mutate(overall = rl_mean[2:10]) %>% 
+  add_row(landcover = 99, slope_1 = rs_mean[1], slope_2 = rs_mean[2], slope_3 = rs_mean[3], slope_4 = rs_mean[4], slope_5 = rs_mean[5], slope_6 = rs_mean[6])
+
+
+
+tibble(final_mtwoway)
+
+
+write.csv(final_mtwoway, hert("_analysis/02-26_twoWay_mean.csv")) # export clean table for manuscript
+
+
+##================================ Two-way Sum ================================
+
+
+# Import data
+slopebins <- slope.binned
+lc <- landcover
+erosion <- rusle2
+
+# Create a combined category raster. This encodes each landcover × slope combination uniquely.
+multiplex <- lc * 1000 + slopebins # Creat a raster with a uniqe ID for each slope class - landcover combo
+names(multiplex) <- "multiplex"
+
+
+# Compute MEAN erosion value of each slope-landcover combo
+two_way_sum <- zonal(erosion, multiplex, fun = "sum", na.rm = TRUE) # I think the na.rm here drops the NA landcover and water
+
+# Seperate out multiplex
+stwo_way <- two_way_sum %>% 
+  mutate(
+    landcover   = multiplex %/% 1000,
+    slope_class = multiplex %% 1000
+  ) %>% 
+  rename(sum_erosion = GL_RUSLE2_30m_raster_r)
+
+# Pivot
+stwo_way_wide <- stwo_way %>% 
+  select(-multiplex) %>% 
+  arrange(landcover, slope_class) %>%
+  pivot_wider(
+    names_from = slope_class,
+    values_from = sum_erosion,
+    names_prefix = "slope_"
+  )
+
+
+# Calculate the overall sum for each slope class 
+rs_sum <- terra::zonal(erosion, slopebins, "sum", na.rm = TRUE)[,2]
+
+# Calculate the overall sum for each land cover class
+rl_sum <- terra::zonal(erosion, lc, "sum", na.rm = TRUE)[,2]
+
+# Calcualte area of each landcover
+lc_area_km <- terra::zonal(cellSize(landcover.int, unit="km"),
+                           landcover.int, fun="sum")[,2]
+
+
+# Combine two way table with means
+final_stwoway <- stwo_way_wide %>% 
+  mutate(
+    overall = rl_sum[2:10],
+    area_km = lc_area_km[2:10],
+    erosion_perc = overall / sum(overall) * 100,
+    area_perc = area_km / sum(area_km) * 100
+    ) %>% 
+  add_row(landcover = 99, slope_1 = rs_sum[1], slope_2 = rs_sum[2], slope_3 = rs_sum[3], slope_4 = rs_sum[4], slope_5 = rs_sum[5], slope_6 = rs_sum[6])
+
+
+tibble(final_stwoway)
+
+
+write.csv(final_stwoway, hert("_analysis/02-26_twoWay_sum.csv")) # export clean table for manuscript
+
+
+
+
 
 
 #================================ Pub Tables ================================
@@ -596,7 +621,105 @@ save_as_image(slope_rusle.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents
 #================================ Archive ================================
 
 
+##================================ RUSLE2 ================================
+
+###================================ Summary Stats ================================
+# Calculate a quick mean, median, max, and min for each land cover
+
+
+# input the raster needed for statics here
+landcover.int <- landcover # call landcover
+raster.in <- rusle2 # call rusle2 raster
+
+levels(landcover.int)
+
+# Compute statistics
+rusle_mean <- terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2]
+#rusle_median <- terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2]
+rusle_sum <- terra::zonal(raster.in, landcover.int, "sum", na.rm = TRUE)[,2]
+rusle_area <- terra::zonal(cellSize(landcover.int, unit="km"),
+                           landcover.int, fun="sum")[,2]
+
+
+# # Global (total) stats
+# g_rusle_mean <- terra::global(raster.in, "mean", na.rm = TRUE)[,1]
+# g_rusle_median <- NA #terra::global(raster.in, "median", na.rm = TRUE)[,1] # doesn't work
+# g_rusle_sum <- terra::global(raster.in, "sum", na.rm = TRUE)[,1]
+# g_rusle_area <- terra::global(cellSize(landcover.int, unit="km"),
+#                     landcover.int, fun = "sum")[,1]
+
+
+# Build summary df
+rusle_stats <- data.frame("landcover" = levels(landcover.int),
+                          "mean" = rusle_mean[1:11], 
+                          "median" = rusle_median[1:11],
+                          "sum" = rusle_sum[1:11],
+                          "area_km" = rusle_area[1:11]) %>% # number of cells per class
+  filter(landcover.ID != 0 &
+           landcover.ID != 18) %>% # remove NA and water before doing percentages
+  
+  mutate("area_perc" = area_km / sum(area_km) * 100, # percent of area each landcover is responsible for
+         "erosion_perc" = sum / sum(sum) * 100)  # percent of erosion each landcover is responsible for
+
+# Add totals row
+rusle_stats <- rusle_stats %>%
+  add_row(landcover.land_cover = "Total", mean = mean(rusle_stats$mean), sum = sum(rusle_stats$sum), area_km = sum(rusle_stats$area_km)) # Add totals row
+
+
+tibble(rusle_stats) # print, data is in tonnes per hectare
+
+
+
+#write.csv(rusle_stats, hert("_analysis/rusle2-landcover-stats.csv")) # export to excel
+
+
+
 rulse2_stats <- read.csv(hert("_analysis/rusle2-landcover-stats.csv"))
+
+
+##================================ Sl Summary Stats ================================
+# calculate a quick mean, median, max, and min for each land cover
+
+
+# input the raster needed for statics here
+landcover.int <- landcover # landcover is also needed
+raster.in <- slope # call slope raster
+
+
+# Compute statistics
+slope_mean <- terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2]
+slope_median <- terra::zonal(raster.in, landcover.int, "median", na.rm = TRUE)[,2]
+slope_area <- zonal(cellSize(landcover.int, unit="km"),
+                    landcover.int, fun="sum")[,2]
+
+
+
+# Global (total) stats
+g_slope_mean <- terra::global(raster.in, "mean", na.rm = TRUE)[,1]
+g_slope_median <- NA #terra::global(raster.in, "median", na.rm = TRUE)[,1] # doesn't work
+g_slope_area <- terra::global(cellSize(landcover.int, unit="km"),
+                              landcover.int, fun = "sum")[,1]
+
+
+# Build summary df
+slope_stats <- data.frame("landcover" = levels(landcover.int),
+                          "mean" = slope_mean[1:11], 
+                          "median" = slope_median[1:11],
+                          "area_km" = slope_area[1:11]) %>% # number of cells per class
+  filter(landcover.ID != 0 &
+           landcover.ID != 18) %>% # Remove NA cells prior to area calculations
+  
+  mutate("area_perc" = area_km / sum(area_km) * 100)  # percent of area each landcover is responsible for
+
+# Add totals row
+slope_stats <- slope_stats %>%
+  add_row(landcover.land_cover = "Overall", mean = mean(slope_stats$mean), area_km = sum(slope_stats$area_km)) # Add totals row
+
+
+tibble(slope_stats) # print, data is in tonnes per hectare
+
+
+#write.csv(slope_stats, hert("_analysis/slope-landcover-stats.csv")) # export to excel
 
 
 
