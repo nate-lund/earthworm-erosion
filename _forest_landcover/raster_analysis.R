@@ -318,17 +318,23 @@ write.csv(final_stwoway, hert("_analysis/02-26_twoWay_sum.csv")) # export clean 
 
 #================================ Pub Tables ================================
 
+# Pull data
+stack_slopeBylandcover_df <- read.csv(hert("_analysis/02-26_stack_slopeBylandcover.csv"))
+stack_landcoverBySlope_df <- read.csv(hert("_analysis/02-26_stack_landcoverBySlope.csv"))
+twoWay_mean_df <- read.csv(hert("_analysis/02-26_twoWay_mean.csv"))
+twoWay_sum <- read.csv(hert("_analysis/02-26_twoWay_sum.csv")) 
+
+
 
 ##================================ Slope Bins ================================
 
-slope_stack_lc_df <- read.csv(hert("_analysis/slope-stack_lc.csv"))
-slope_stack_slope_df <- read.csv(hert("_analysis/slope-stack_slope.csv"))
 
-slope_bins <- left_join(slope_stack_lc_df, slope_stack_slope_df, by = "land_cover")
+slope_bins <- left_join(stack_landcoverBySlope_df, stack_slopeBylandcover_df, by = "land_cover")
 
 slope_bins <- slope_bins %>% 
   # Round and rename
-  mutate("X0_2.x" = round(X0_2.x, digits = 1),
+  mutate("mean_slope" = round(mean_slope, digits = 2),
+         "X0_2.x" = round(X0_2.x, digits = 1),
          "X02_5.x" = round(X02_5.x, digits = 1),
          "X05_15.x" = round(X05_15.x, digits = 1),
          "X15_30.x" = round(X15_30.x, digits = 1),
@@ -342,11 +348,11 @@ slope_bins <- slope_bins %>%
          "X50_100.y" = round(X50_100.y, digits = 1)
   ) %>% 
   mutate(landcover = case_when(
-    land_cover == "1 Temperate or Subpolar Needleaf Forest" ~ "Temperate or Subpolar Needleaf Forest",
-    land_cover == "5 Temperate or Subpolar Broadleaf Deciduous Forest" ~ "Temperate or Subpolar Broadleaf Deciduous Forest",
+    land_cover == "1 Temperate or Subpolar Needleaf Forest" ~ "Needleaf Forest",
+    land_cover == "5 Temperate or Subpolar Broadleaf Deciduous Forest" ~ "Broadleaf Deciduous Forest",
     land_cover == "6 Mixed Forest" ~ "Mixed Forest",
-    land_cover == "8 Temperate or Subpolar Shrubland" ~ "Temperate or Subpolar Shrubland",
-    land_cover == "10 Temperate or Subpolar Grassland" ~ "Temperate or Subpolar Grassland",
+    land_cover == "8 Temperate or Subpolar Shrubland" ~ "Shrubland",
+    land_cover == "10 Temperate or Subpolar Grassland" ~ "Grassland",
     land_cover == "14 Wetland" ~ "Wetland",
     land_cover == "15 Cropland" ~ "Cropland",
     land_cover == "16 Barren Land" ~ "Barren Land",
@@ -362,6 +368,8 @@ slope_bins <- slope_bins %>%
 slope_bins.ft <- flextable(slope_bins,
                                 col_keys = c("landcover",
                                              "blank",
+                                             "mean_slope",
+                                             "blank3",
                                              "X0_2.x",
                                              "X02_5.x",
                                              "X05_15.x",
@@ -389,7 +397,8 @@ slope_bins.ft <- flextable(slope_bins,
   align(align = "left", part = "header", j = "landcover") %>% 
   align(align = "left", j = "landcover") %>% 
   
-  width(j = c("X0_2.x",
+  width(j = c("mean_slope",
+              "X0_2.x",
               "X02_5.x",
               "X05_15.x",
               "X15_30.x",
@@ -401,12 +410,12 @@ slope_bins.ft <- flextable(slope_bins,
               "X15_30.y",
               "X30_50.y",
               "X50_100.y"), width = 0.75) %>% 
-  width(j = "landcover", width = 3.5) %>% 
+  width(j = "landcover", width = 2) %>% 
   
   #  padding(padding = 6, part = "header") %>% 
   line_spacing(space = 1.8, part = "header") %>% 
   
-  bold(i = ~ landcover == "Temperate or Subpolar Broadleaf Deciduous Forest" |
+  bold(i = ~ landcover == "Broadleaf Deciduous Forest" |
          landcover == "Mixed Forest") %>% 
   bold(i = ~ landcover == "Overall") %>% 
   
@@ -431,20 +440,18 @@ slope_bins.ft <- flextable(slope_bins,
   
   # Add headers
   add_header_row(values = c("",
-                            "Landcover by Slope Class*",
-                            "Slope Class by Landcover**"),
-                 colwidths = c(2, # adds up to total number of cols
+                            "a) Landcover by Slope Class",
+                            "b) Slope Class by Landcover"),
+                 colwidths = c(4, # adds up to total number of cols
                                7,
                                6)
   ) %>% 
-  
-  # Add footers
-  add_footer_lines("* Rows sum to 100%. ** Columns sum to 100%.") %>% 
   
   # Rename columns
   labelizor(
   part = "header", 
   labels = c("landcover" = "Landcover",
+             "mean_slope" = "Mean Slope (%)",
              "X0_2.x" = "0 - 2%",
              "X02_5.x" = "2 - 5%",
              "X05_15.x" = "5 - 15%",
@@ -471,11 +478,188 @@ save_as_image(slope_bins.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/
 
 
 
+##================================ Two-way tables ================================
+
+twoWay_mean_df
+twoWay_sum
+
+two_way <- left_join(twoWay_mean_df, twoWay_sum, by = "landcover") %>% 
+ 
+  # Round and rename
+  mutate("slope_1.x" = round(slope_1.x, digits = 2),
+         "slope_2.x" = round(slope_2.x, digits = 2),
+         "slope_3.x" = round(slope_3.x, digits = 2),
+         "slope_4.x" = round(slope_4.x, digits = 2),
+         "slope_5.x" = round(slope_5.x, digits = 2),
+         "slope_6.x" = round(slope_6.x, digits = 3),
+         
+         "overall.x" = round(overall.x, digits = 2),
+         
+         
+         "slope_1.y" = signif(slope_1.y, digits = 3)/1000,
+         "slope_2.y" = signif(slope_2.y, digits = 3)/1000,
+         "slope_3.y" = signif(slope_3.y, digits = 3)/1000,
+         "slope_4.y" = signif(slope_4.y, digits = 3)/1000,
+         "slope_5.y" = signif(slope_5.y, digits = 3)/1000,
+         "slope_6.y" = signif(slope_6.y, digits = 3)/1000,
+         
+         "overall.y" = signif(overall.y, digits = 3)/1000,
+         
+         "area_km" = round(area_km, digits = 0),
+         "erosion_perc" = round(erosion_perc, digits = 1),
+         "area_perc" = round(area_perc, digits = 1),
+  ) %>% 
+  
+  mutate(landcover = case_when(
+    landcover == "1" ~ "Needleaf Forest",
+    landcover == "5" ~ "Broadleaf Deciduous Forest",
+    landcover == "6" ~ "Mixed Forest",
+    landcover == "8" ~ "Shrubland",
+    landcover == "10" ~ "Grassland",
+    landcover == "14" ~ "Wetland",
+    landcover == "15" ~ "Cropland",
+    landcover == "16" ~ "Barren Land",
+    landcover == "17" ~ "Urban and Built-up",
+    landcover == "99" ~ "Overall"
+  ))
+
+
+
+
+
+
+
+# Add data and format table
+two_way.ft <- flextable(two_way,
+                            col_keys = c("landcover",
+                                         "blank",
+                                         
+                                         "slope_1.x",
+                                         "slope_2.x",
+                                         "slope_3.x",
+                                         "slope_4.x",
+                                         "slope_5.x",
+                                         "slope_6.x",
+                                         "overall.x",
+                                         
+                                         "blank2",
+                                         "slope_1.y",
+                                         "slope_2.y",
+                                         "slope_3.y",
+                                         "slope_4.y",
+                                         "slope_5.y",
+                                         "slope_6.y",
+                                         "overall.y",
+                                         
+                                         "blank3",
+                                         "area_km",
+                                         "erosion_perc",
+                                         "area_perc"
+                            )) %>% 
+  empty_blanks() %>% 
+  
+  # All
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  align(align = "right", part = "all") %>%
+  
+  # Header
+  align(align = "center", part = "header") %>%
+  valign(valign = "center", part = "header") %>% 
+  
+  # Landcover
+  align(align = "left", part = "header", j = "landcover") %>% 
+  align(align = "left", j = "landcover") %>% 
+  
+  width(j = c("landcover",
+              
+              "slope_1.x",
+              "slope_2.x",
+              "slope_3.x",
+              "slope_4.x",
+              "slope_5.x",
+              "slope_6.x",
+              "overall.x",
+              
+              "slope_1.y",
+              "slope_2.y",
+              "slope_3.y",
+              "slope_4.y",
+              "slope_5.y",
+              "slope_6.y",
+              "overall.y",
+              
+              "area_km",
+              "erosion_perc",
+              "area_perc"), width = 0.75) %>% 
+  width(j = "landcover", width = 2) %>% 
+  
+  #  padding(padding = 6, part = "header") %>% 
+  line_spacing(space = 1.8, part = "header") %>% 
+  
+  bold(i = ~ landcover == "Broadleaf Deciduous Forest" |
+         landcover == "Mixed Forest") %>% 
+  
+  bold(i = ~ landcover == "Overall") %>% 
+  
+  # Add headers
+  add_header_row(values = c("",
+                            "a) Erosion Rate (t/ha/yr)",
+                            "b) Total Erosion (1000*t)",
+                            "c) Summary"),
+                 colwidths = c(2, # adds up to total number of cols
+                               8,
+                               8,
+                               3)
+  ) %>%
+
+  
+  
+  labelizor(
+    part = "header", 
+    labels = c("landcover" = "Landcover",
+               
+               "slope_1.x" = "0 - 2%",
+               "slope_2.x" = "2 - 5%",
+               "slope_3.x" = "5 - 15%",
+               "slope_4.x" = "15 - 30%",
+               "slope_5.x" = "30 - 50%",
+               "slope_6.x" = "> 50%",
+               "overall.x" = "Average",
+               
+               "slope_1.y" = "0 - 2%",
+               "slope_2.y" = "2 - 5%",
+               "slope_3.y" = "5 - 15%",
+               "slope_4.y" = "15 - 30%",
+               "slope_5.y" = "30 - 50%",
+               "slope_6.y" = "> 50%",
+               "overall.y" = "Average",
+               
+               "area_km" = "Area (km²)",
+               "erosion_perc" = "% Total Erosion",
+               "area_perc" = "% Total Area"
+    ))
+
+
+
+two_way.ft
+
+
+
+save_as_image(two_way.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/two_way.ft.svg")
+
+
+
+
 
 
 
 ##================================ RUSLE2-Slope Stats ================================
 
+twoWay_mean_df
+twoWay_sum
+
+two_way <- left_join(twoWay_mean_df, twoWay_sum, by = "landcover")
 
 slope_stats_df <- read.csv(hert("_analysis/slope-landcover-stats.csv"))
 rulse2_stats <- read.csv(hert("_analysis/rusle2-landcover-stats.csv"))
