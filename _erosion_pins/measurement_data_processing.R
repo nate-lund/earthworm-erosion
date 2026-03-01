@@ -495,33 +495,62 @@ envelope1 <- envelope %>%
 
 # Merge erosion and Bd dataframes
 # Add an index row
-envelope2 <- envelope1 %>%
+dzdt_bd <- envelope1 %>%
   mutate(Worm_Type = case_when(
     case %in% c("ew_high", "ew_low") ~ "L",
-    TRUE ~ "A"   # or whatever mapping you want for the others
+    TRUE ~ "A"
   )) %>% 
   
   left_join(baumann_df, by = "Worm_Type") %>% 
-  select(-Worm_Type)
-
-
-# Compute erosion in g/cm2/yr, propgating error.
-envelope3 <- envelope2 %>% 
+  
+  # Split case into two columns
+  
   mutate(
+    worms = case_when(
+      case %in% c("ew_high", "ew_low") ~ "EW",
+      TRUE ~ "JW"
+    ),
+    
+    slope = case_when(
+      case %in% c("ew_high", "jw_high") ~ "high",
+      TRUE ~ "low"
+    )
+  ) %>% 
+  
+  # Clean up
+  select(worms, slope, dzdt_wmean, dzdt_wse, Bd_mean, Bd_se) 
+
+
+tibble(dzdt_bd)
+
+
+# Compute erosion and SE values with various units
+envelope_calcs <- dzdt_bd %>% 
+  
+  # Compute erosion in g/cm2/yr - propagate error
+  mutate( 
     g_cm2 = dzdt_wmean * Bd_mean,
     g_cm2_se = sqrt(
       (Bd_mean^2) * (dzdt_wse^2) +
-        (dzdt_wmean^2) * (Bd_se^2)
+        (dzdt_wmean^2) * (Bd_se^2) 
     )
-  )
+  ) %>% 
+  
+  # Compute in t/ha/yr
+  mutate(
+    t_ha = g_cm2 * 10,
+    t_ha_se = g_cm2_se * 10
+  ) %>% 
+  
+  # Compute area 
+  mutate(t_yr = case_when(
+    slope == "high" ~ t_ha * 100 * 92771 * 0.092,
+    slope == "high" ~ t_ha * 100 * 92771 * 0.315
+  ))
 
 
-# Compute erosion in t/ha/yr
-envelope4 <- envelope3 %>% 
-  mutate(t_ha = g_cm2 * 10,
-         t_ha_se = g_cm2_se * 10, 
-         t_ha_yr = t_ha * 3 / 12, # Adjusted for yearly total, considering intensity of erosion July - Sept
-         t_ha_yr_se = t_ha_se * 3 / 12)
+
+
 
 tibble(envelope4)
 
