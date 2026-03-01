@@ -47,7 +47,7 @@ input$index <- as.numeric(factor((paste(input$site, input$forest, input$transect
 input$id <- 1:nrow(input)
 
 # filter the data set to remove unneeded columns
-input <- input %>% dplyr::select(date, dayof, index, id, worms, site, forest, transect, slope_pos, pin_ID, mm_ch, mm_bl)
+input <- input %>% select(date, dayof, index, id, worms, site, forest, transect, slope_pos, pin_ID, mm_ch, mm_bl)
 
 # arrange pins unique pin, in order of date
 input <- input %>% 
@@ -298,7 +298,7 @@ print(slopes.only, n = 27)
 
 # filter for slope & margin of error (cm/day) & p-value
 H3_final_table <- coefs.wide %>% 
-  dplyr::select(forest,
+  select(forest,
          slope_pos,
          estimate_slope.1,
          std.error_slope.1,
@@ -425,7 +425,7 @@ H2_final_table <- lm.coefs %>%
          m_error = round((m_error * 365 / 10), digits =3)) %>%
   
   # Selected only wanted columns
-  dplyr::select(forest, term, estimate, std.error, p.value) %>%
+  select(forest, term, estimate, std.error, p.value) %>%
   pivot_wider(
     id_cols = forest,
     names_from = term,
@@ -451,7 +451,7 @@ write_xlsx(H2_final_table, hert("_analysis/H2_final_table.xlsx"))
 
 # Get erosion pin mean data
 envelope <- H2_final_table %>% 
-  dplyr::select(forest, slope_bs, ME_bs)
+  select(forest, slope_bs, ME_bs)
 
 # Pull Bd data
 baumann <- read_excel(hert("Baument-et-al_BD-values.xlsx"), sheet = "DataTAB") # ARB and LR data
@@ -502,7 +502,7 @@ envelope2 <- envelope1 %>%
   )) %>% 
   
   left_join(baumann_df, by = "Worm_Type") %>% 
-  dplyr::select(-Worm_Type)
+  select(-Worm_Type)
 
 
 # Compute erosion in g/cm2/yr, propgating error.
@@ -1231,12 +1231,12 @@ sig.table <- coefs.list %>%
     term == "lspline(dayof, knots = dates)5" ~ "slope.5",
   )) %>% 
   mutate(signif = if_else(p.value <= 0.1, "X", "-")) %>% 
-  dplyr::select(forest,
+  select(forest,
          slope_pos,
          term,
          signif) %>% 
   pivot_wider(names_from = term, values_from = signif) %>% 
-  dplyr::select(-intercept) %>% 
+  select(-intercept) %>% 
   arrange(forest, slope_pos)
 
 #datatable(sig.table)
@@ -1395,7 +1395,7 @@ erosion <- stats.df %>%
   mutate("elevation change (cm/yr)" = slope * 365.25 / 10) %>%
   mutate("error +/- (cm/yr)" = ((slope - cf_lower) * 365.25 / 10)) %>% 
   mutate("signifigant" = if_else(p.value > 0.049, "N", "Y")) %>% 
-  dplyr::select("forest", "slope_pos", "elevation change (cm/yr)", "error +/- (cm/yr)", "p.value", "signifigant")
+  select("forest", "slope_pos", "elevation change (cm/yr)", "error +/- (cm/yr)", "p.value", "signifigant")
 
 # visualzie erosion rates in a table
 print(erosion)
