@@ -158,23 +158,28 @@ stack_slope <- stack.sum %>%
   mutate(slope_frac = lc_frac / sum(lc_frac, na.rm = TRUE) * 100) %>% 
   ungroup() %>% 
   arrange(slope_class) %>% 
-  select(-n, -nsum, -lc_frac) %>% 
+  dplyr::select(-n, -nsum, -lc_frac) %>% 
   pivot_wider(names_from = slope_class,
               values_from = slope_frac)
 
 
 #' [compute mean slope for each landcover ]
-slope_mean <- terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)[,2]
+slope_mean <- terra::zonal(raster.in, landcover.int, "mean", na.rm = TRUE)
 
+slope_mean
 
 # Pivot df for landcover percent breakdown
 stack_lc <- stack.sum %>%
-  select(-n, -nsum) %>% 
+  dplyr::select(-n, -nsum) %>% 
   pivot_wider(names_from = slope_class,
               values_from = lc_frac) %>% 
-  mutate(mean_slope = slope_mean[2:10]) %>% 
-
-    add_row(land_cover = "Overall",
+  
+  # Join bins and slope mean
+  left_join(slope_mean, by = "land_cover") %>% 
+  
+  rename(mean = GL_USGS30m_slope_r_land_less100) %>% 
+  
+  add_row(land_cover = "Overall",
           `0_2` = slope_totals[1,4],
           `02_5` = slope_totals[2,4],
           `05_15` = slope_totals[3,4],
@@ -333,7 +338,7 @@ slope_bins <- left_join(stack_landcoverBySlope_df, stack_slopeBylandcover_df, by
 
 slope_bins <- slope_bins %>% 
   # Round and rename
-  mutate("mean_slope" = round(mean_slope, digits = 2),
+  mutate("mean_slope" = round(mean, digits = 2),
          "X0_2.x" = round(X0_2.x, digits = 1),
          "X02_5.x" = round(X02_5.x, digits = 1),
          "X05_15.x" = round(X05_15.x, digits = 1),
