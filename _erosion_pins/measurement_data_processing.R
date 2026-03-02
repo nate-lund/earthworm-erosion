@@ -543,21 +543,25 @@ envelope_calcs <- dzdt_bd %>%
   ) %>% 
   
   # Compute area 
-  mutate(t_yr = case_when(
-    slope == "high" ~ t_ha * 100 * 92771 * 0.092,
-    slope == "high" ~ t_ha * 100 * 92771 * 0.315
-  ))
+  mutate(
+    t_yr = case_when(
+      slope == "high" ~ t_ha * 100 * 92771 * 0.092 / 1000,
+      slope == "low" ~ t_ha * 100 * 92771 * 0.315 / 1000
+      ),
+    
+    t_yr_se = case_when(
+      slope == "high" ~ t_ha_se * 100 * 92771 * 0.092 / 1000,
+      slope == "low" ~ t_ha_se * 100 * 92771 * 0.315 / 1000
+      )
+    )
+
+
+tibble(envelope_calcs)
 
 
 
 
 
-tibble(envelope4)
-
-envelope4 %>% 
-  mutate(x = area_km)
-
-#' [WIP HERE]
 
 #================================ Pub Tables ================================
 
