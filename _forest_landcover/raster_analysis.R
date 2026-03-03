@@ -609,8 +609,8 @@ two_way.ft <- flextable(two_way,
   
   # Add headers
   add_header_row(values = c("",
-                            "a) Erosion Rate (t/ha/yr)",
-                            "b) Total Erosion (1000*t)",
+                            "a) Mean Erosion Rate (t/ha/yr)",
+                            "b) Total Annual Erosion (10³ t)",
                             "c) Summary"),
                  colwidths = c(2, # adds up to total number of cols
                                8,
@@ -638,7 +638,7 @@ two_way.ft <- flextable(two_way,
                "slope_4.y" = "15 - 30%",
                "slope_5.y" = "30 - 50%",
                "slope_6.y" = "> 50%",
-               "overall.y" = "Average",
+               "overall.y" = "Sum",
                
                "area_km" = "Area (km²)",
                "erosion_perc" = "% Total Erosion",
