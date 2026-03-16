@@ -28,29 +28,29 @@ hert <- function(file) {
 site_table <- tribble(
   ~"Location", ~"Site", ~"Earthworms", ~"Par-Sci", ~"Soil Series", ~"Total Rainfall (cm)",
   
-  "Lake Rebecca Park Reserve", "LRW", "European", "N", "Lester-Kilkenny complex", "4.96",
+  "Lake Rebecca Park Reserve", "LRW", "European worm", "N", "Lester-Kilkenny complex", "4.96",
   
   "", "LRJ", "Jumping worm", "N", "Lester loam", "4.96",
   
-  "", "LRE", "European", "N", "Lester loam", "4.96",
+  "", "LRE", "European worm", "N", "Lester loam", "4.96",
   
   "Minnesota Landscape Arboretum", "MAG", "Jumping worm", "N", "Lester-Kilkenny complex", "4.82",
   
-  "", "ASH", "European", "N", "Lester-Kilkenny complex", "4.82",
+  "", "ASH", "European worm", "N", "Lester-Kilkenny complex", "4.82",
   
   "", "WD", "Jumping worm", "N", "Lester-Kilkenny complex", "4.82",
   
   "Plummer House", "PLH", "Jumping worm", "Y", "Marlean silty clay loam", "5.33",
   
-  "Indian Heights Park", "IH", "European", "Y", "Marlean silty clay loam", "5.33",
+  #"Indian Heights Park", "IH", "European worm", "Y", "Marlean silty clay loam", "5.33",
   
   "Northern Heights Park", "NH", "Jumping worm", "Y", "Marlean silty clay loam", "4.90",
   
-  "Lake Minnetonka Regional Park", "LME", "European", "Y", "Lester loam", "4.69",
+  "Lake Minnetonka Regional Park", "LME", "European worm", "Y", "Lester loam", "4.69",
   
   "", "LMJ", "Jumping worm", "Y", "Lester-Malardi complex", "4.69",
   
-  "Riley Creek Conservation Area", "RCE", "European", "Y", "Lester-Ridgeton complex", "5.39",
+  "Riley Creek Conservation Area", "RCE", "European worm", "Y", "Lester-Ridgeton complex", "5.39",
   
   "", "RCJ", "Jumping worm", "Y", "Suckercreek fine sandy loam", "5.39"
 )
@@ -62,6 +62,12 @@ ft <- flextable(site_table) %>%
   fontsize(part = "all", size = 11) %>% 
   
   align(align = "left", part = "all") %>% 
-  valign(valign = "center", part = "header")
+  valign(valign = "center", part = "header") %>% 
+  line_spacing(space = 1.8, part = "header")
+  
   
 ft
+
+save_as_image(ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/Table1_site_data.svg")
+
+

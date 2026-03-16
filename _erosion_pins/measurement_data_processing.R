@@ -1,7 +1,7 @@
 #================================ Setup ================================
 
 # libraries needed
-libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom", "DT", "flextable")
+libs <- c("lidR", "shapefiles", "sf", "terra", "raster", "tidyr", "dplyr", "ggplot2", "easypackages", "spatialEco","here", "performance", "see", "RColorBrewer", "lme4", "nlme", "readxl", "writexl", "emmeans", "splines", "lspline", "ggeffects", "lubridate", "cowplot", "gridGraphics", "broom", "DT", "flextable", "wesanderson")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -118,9 +118,8 @@ pin.p <- output.qc %>%
 
 
 # Generate list of forests and slope positions for analysis
-forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ", "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")
-#forests <- c("ASH")
-#forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ")
+forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ", "RCE", "LME", "RCJ", "LMJ", "NH", "PLH")
+#forests <- c("ASH", "LRE", "LRW", "MAG", "WD", "LRJ", "RCE", "LME", "IH", "RCJ", "LMJ", "NH", "PLH")
 nforests <- length(forests)
 
 hill.poses <- c("BS", "FS")
@@ -468,13 +467,14 @@ envelope1 <- envelope %>%
   # Create classes
   mutate(case = case_when(
     forest == "LRE" ~ "ew_low",
-    forest == "IH" ~ "ew_low",
     forest == "LRW" ~ "ew_high",
     forest == "ASH" ~ "ew_high",
     forest == "LME" ~ "ew_high",
     forest == "RCE" ~ "ew_high",
+    
     forest == "PLH" ~ "jw_low",
     forest == "NH" ~ "jw_low",
+    
     forest == "LRJ" ~ "jw_high",
     forest == "MAG" ~ "jw_high",
     forest == "WD" ~ "jw_high",
@@ -565,6 +565,116 @@ tibble(envelope_calcs)
 
 #================================ Pub Tables ================================
 
+##================================ Envelope ================================
+
+envelope_calcs.df <- envelope_calcs %>% 
+  mutate(dzdt_wmean = round(dzdt_wmean, digits = 2),
+         dzdt_wse = round(dzdt_wse, digits = 2),
+         Bd_mean = round(Bd_mean, digits = 2),
+         Bd_se = round(Bd_se, digits = 4),
+         g_cm2 = round(g_cm2, digits = 2),
+         g_cm2_se = round(g_cm2_se, digits = 2),
+         t_ha = round(t_ha, digits = 2),
+         t_ha_se = round(t_ha_se, digits = 2),
+         t_yr = round(t_yr, digits = 0),
+         t_yr_se = round(t_yr_se, digits = 0)
+         ) %>% 
+  filter(slope == "high")
+
+# Add data and format table
+envelope_calcs.ft <- flextable(envelope_calcs.df,
+                               col_keys = c(
+                                 "worms",
+                                 "blank",
+                                 #  "slope",
+                                 "dzdt_wmean",
+                                 "dzdt_wse",
+                                 "blank1",
+                                 "Bd_mean",
+                                 "Bd_se",
+                                 "blank2",
+                                 "g_cm2",
+                                 "g_cm2_se",
+                                 "blank3",
+                                 "t_ha",
+                                 "t_ha_se",
+                                 "blank4",
+                                 "t_yr",
+                                 "t_yr_se"
+                               ))%>% 
+  empty_blanks() %>%
+  
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  
+  align(align = "center", part = "all") %>% 
+  valign(valign = "center", part = "header") %>% 
+  
+  
+  # All
+  font(part = "all", fontname = "Calibri") %>% 
+  fontsize(part = "all", size = 11) %>% 
+  align(align = "right", part = "all") %>%
+  
+  # Header
+  align(align = "center", part = "header") %>%
+  valign(valign = "center", part = "header") %>% 
+  
+  width(j = c("worms",
+              #"slope",
+              "dzdt_wmean",
+              "dzdt_wse",
+              "Bd_mean",
+              "Bd_se",
+              "g_cm2",
+              "g_cm2_se",
+              "t_ha",
+              "t_ha_se",
+              "t_yr",
+              "t_yr_se"), width = 0.7) %>% 
+  #width(j = "landcover", width = 3.5) %>% 
+  
+  line_spacing(space = 1.8, part = "header") %>% 
+  
+  # Landcover
+  #align(align = "left", part = "center", j = "landcover") %>% 
+  #align(align = "left", j = "landcover") %>% 
+  
+  
+  add_header_row(values = c("",
+                            "Δ Elevation (cm/yr)",
+                            "Bulk Desnity (g/cm³)",
+                            "Erosion (g/cm²/yr)",
+                            "Erosion (t/ha/yr)",
+                            "Erosion (10³ t/yr)"),
+                 colwidths = c(2, # adds up to total number of cols
+                               3,
+                               3,
+                               3,
+                               3,
+                               2)) %>% 
+  
+  labelizor(
+    part = "header", 
+    labels = c("worms" = "Worms",
+               #"slope" = "Slope",
+               "dzdt_wmean" = "Mean",
+               "dzdt_wse" = "SE",
+               "Bd_mean" = "Mean",
+               "Bd_se" = "SE",
+               "g_cm2" = "Mean",
+               "g_cm2_se" = "SE",
+               "t_ha" = "Mean",
+               "t_ha_se" = "SE",
+               "t_yr" = "Mean",
+               "t_yr_se" = "SE"
+    ))
+
+envelope_calcs.ft
+
+save_as_image(envelope_calcs.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/Figure6_envelope_calcs.svg")
+
+
 ##================================ H3 ================================
 
 # Run ONE Of the two following chunks to select the datasets to put in table
@@ -585,7 +695,11 @@ H3_final_table.df <- H3_final_table %>%
            forest == "RCJ" |
            forest == "LMJ" |
            forest == "NH" |
-           forest == "PLH")
+           forest == "PLH") %>% 
+  mutate(slope_pos = case_when(
+    slope_pos == "BS" ~ "BS",
+    slope_pos == "FS" ~ "BS2",
+  ))
 
 
 
@@ -752,10 +866,10 @@ H3_mm_over_time.ft <- flextable(H3_final_table.df,
 H3_mm_over_time.ft
 
 # For ARB
-save_as_image(H3_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/ARB_H3_mm_over_time.ft.svg")
+save_as_image(H3_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/Table5_Arb-over-time.svg")
 
 # For Par
-save_as_image(H3_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/Par_H3_mm_over_time.ft.svg")
+save_as_image(H3_mm_over_time.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/Table6_Par-over-time.svg")
 
 
 
@@ -800,6 +914,7 @@ H2_mm_over_time.ft <- flextable(H2_final_table.filter,
               "ME_bs",
               "ME_fs"), width = 0.75) %>% 
   
+  line_spacing(space = 1.3, part = "all") %>% 
   line_spacing(space = 1.8, part = "header") %>% 
   
   
@@ -810,6 +925,7 @@ H2_mm_over_time.ft <- flextable(H2_final_table.filter,
           forest ==  "LRJ" | 
           forest ==  "RCJ" | 
           forest ==  "PLH" | 
+          forest ==  "LMJ" | 
           forest ==  "NH"|
           forest ==  "RCJ", color = "firebrick2", j = "forest") %>% 
   
@@ -837,7 +953,7 @@ H2_mm_over_time.ft <- flextable(H2_final_table.filter,
     part = "header", 
     labels = c("forest" = "Site",
                "slope_bs" = "BS Erosion (cm/yr)",
-               "dslope_fs" = "FS Erosion (cm/yr)",
+               "dslope_fs" = "FS/BS2¹ Erosion (cm/yr)",
                "ME_bs" = "Std. Error",
                "ME_fs" = "Std. Error"
     ))
@@ -864,7 +980,7 @@ plotings <- pin.ls %>%
            forest == "LRJ")
 
 
-ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
+arb_lr_plots <- ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
   
   geom_line(aes(group = pin,
                 color =  slope_pos),
@@ -886,15 +1002,15 @@ ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
   scale_color_manual(
     name = "Slope Position",
     values = c(
-      "FS" = "darkolivegreen3",
-      "BS" = "grey50"
+      "FS" = "royalblue2",
+      "BS" = "indianred2"
     )) +
   
   scale_fill_manual(
     name = "Slope Position",
     values = c(
-      "FS" = "darkolivegreen3",
-      "BS" = "grey50"
+      "FS" = "royalblue2",
+      "BS" = "indianred2"
     )) +
   
   scale_linetype_discrete(name = "Slope Position") +
@@ -931,6 +1047,16 @@ ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
         
   ) 
 
+
+arb_lr_plots
+
+ggsave(plot = arb_lr_plots, width = 9, height = 7, dpi = 900,
+       "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/Figure4_Arb-over-time.png")
+
+
+
+
+
 ##================================ H3 Par-Sci ================================
 
 # For Par-Sci
@@ -941,9 +1067,13 @@ plotings <- pin.ls %>%
            forest == "RCJ" |
            forest == "LMJ" |
            forest == "NH" |
-           forest == "PLH")
+           forest == "PLH") %>% 
+  mutate(slope_pos = case_when(
+    slope_pos == "BS" ~ "BS",
+    slope_pos == "FS" ~ "BS2",
+  ))
 
-ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
+par_sci_plots <- ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
   
   geom_line(aes(group = pin,
                 color =  slope_pos),
@@ -966,15 +1096,15 @@ ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
   scale_color_manual(
     name = "Slope Position",
     values = c(
-    "FS" = "darkolivegreen3",
-    "BS" = "grey50"
+    "BS2" = "royalblue2",
+    "BS" = "indianred2"
   )) +
   
   scale_fill_manual(
     name = "Slope Position",
     values = c(
-    "FS" = "darkolivegreen3",
-    "BS" = "grey50"
+      "BS2" = "royalblue2",
+      "BS" = "indianred2"
   )) +
   
   scale_linetype_discrete(name = "Slope Position") +
@@ -1010,6 +1140,10 @@ ggplot(data = plotings, mapping = aes(x = date, y = mm)) +
         
   ) 
 
+par_sci_plots
+
+ggsave(plot = par_sci_plots, width = 9, height = 7, dpi = 900,
+       "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures//Figure5_Par-over-time.png")
 
 
 ##================================ Precip ================================
