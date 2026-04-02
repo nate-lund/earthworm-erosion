@@ -330,7 +330,6 @@ twoWay_mean_df <- read.csv(hert("_analysis/02-26_twoWay_mean.csv"))
 twoWay_sum <- read.csv(hert("_analysis/02-26_twoWay_sum.csv")) 
 
 
-
 ##================================ Slope Bins ================================
 
 
@@ -804,7 +803,45 @@ slope_rusle.ft
 save_as_image(slope_rusle.ft, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_MS1/Figures/slope_rusle.ft.svg")
 
 
+#================================ Pub Plots ===============================
 
+df_long <- stack_landcoverBySlope_df %>%
+  #select(-X) %>%
+  pivot_longer(
+    cols = c(X0_2, X02_5, X05_15, X15_30, X30_50, X50_100, mean),
+    names_to = "slope_class",
+    values_to = "value"
+  ) 
+  
+
+
+
+ggplot(data = df_long, mapping = aes(x = slope_class, y = value)) +
+  geom_col() +
+  facet_wrap(~land_cover) + 
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_line(color = "white"),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        text = element_text(family = "Calibri"),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        
+        strip.background = element_rect(
+          fill = "white",   # or any color
+          color = "white",  # border color
+          linewidth = 0.5
+        ),
+        
+        strip.text = element_text(
+          family = "Calibri",
+          #face = "oblique",
+          color = "black",
+          hjust = 0,   # left
+          vjust = 0  # vertical centering
+          
+        )
+  )
 
 
 #================================ Archive ================================
