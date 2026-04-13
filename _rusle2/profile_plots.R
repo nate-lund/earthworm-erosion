@@ -22,7 +22,7 @@ hert <- function(file) {
   return(file_path)
 }
 
-#'############################### [prepping profiles] ################################
+#================================ Pre-processing data ================================
 
 # load dfs. all datasets are distinct objects but are also in the list
 df.list <- list(
@@ -43,8 +43,8 @@ df.list <- lapply(df.list, function(df) {
   return(df)
 })
 
-#'############################### [segmenting] ################################
-#'############################### [a profile ] ################################
+#================================ Segmenting Profiles ================================
+
 
 
 test <- as_tibble(df.list[[6]])
@@ -142,7 +142,7 @@ write_xlsx(test.rusle, hert("test.rusle.xlsx"))
 
 
 
-#'############################### [plotting all profiles] ################################
+#================================ Plotting all Profiles ================================
 
 # stack dfs
 profiles.a <- bind_rows(df.list, .id = "source")
