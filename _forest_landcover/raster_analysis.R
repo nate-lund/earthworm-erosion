@@ -367,6 +367,8 @@ slope_bins <- slope_bins %>%
   arrange(land_cover)
 
 
+slope_bins
+write_xlsx(slope_bins, path = "C:/Users/natha/OneDrive/Onedrive Documents/01_Projects/P01_MS1/Figures/05-08_Figures/Table2_slopes_raw.xlsx")
 
 # Add data and format table
 slope_bins.ft <- flextable(slope_bins,

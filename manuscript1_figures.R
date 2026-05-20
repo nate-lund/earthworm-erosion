@@ -26,7 +26,7 @@ hert <- function(file) {
 
 # Create the data frame
 site_table <- tribble(
-  ~"Location", ~"Site", ~"Earthworms", ~"Par-Sci", ~"Soil Series", ~"Total Rainfall (cm)",
+  ~"Site", ~"Forest", ~"Earthworm Infestation", ~"Participatory Science", ~"Soil Series", ~"Rainfall During Study (cm)",
   
   "Lake Rebecca Park Reserve", "LRW", "European worm", "N", "Lester-Kilkenny complex", "4.96",
   
