@@ -1,25 +1,142 @@
-# =============================================================================
-# SOIL-BOX MODEL — Scenario 1
-# =============================================================================
-# A simple 1-D soil-profile model with three vertically stacked boxes (layers).
-# The profile has a fixed width and depth of 1, so each box's volume equals its
-# height.  At every time step a fixed volume of material with a given density is
-# added to the top box and fully incorporated, which changes the box's mass,
-# density, and height (and therefore the total profile elevation).
-#
-# Key relationship (width = depth = 1):
-#   mass   = density × height
-#   height = mass / density
-#
-# When new material is added to the top box:
-#   new_mass   = old_mass + (input_volume × input_density)
-#   new_volume = old_volume + input_volume          [= new_height]
-#   new_density = new_mass / new_volume
-#
-# The total elevation of the profile is the sum of all box heights.
-# =============================================================================
+#================================ Setup ================================
 
-# ── USER-CONFIGURABLE PARAMETERS ─────────────────────────────────────────────
+# libraries needed
+libs <- c("ggplot2", "dplyr", "tidyr", "rlang")
+
+# install missing libraries
+installed_libs <- libs %in% rownames(installed.packages())
+if (any(installed_libs == F)) {
+  install.packages(libs[!installed_libs])
+}
+
+# load libraries
+lapply(libs, library, character.only = T)
+
+# enter the file path for the highest level folder you're working in 
+data_folder <- "C:/Users/natha/Box/"
+
+# when a file is needed, call the hert() function
+# for example; data_frame = read.csv(hert("more_data/measurements_data.csv"))
+hert <- function(file) {
+  file_path = paste(data_folder, file, sep = "")
+  return(file_path)
+}
+
+
+#================================ Define Parameters ================================
+
+# Define basic parameters
+nsteps = 10 # Number of timesteps
+dt = 1 # Size of timesteps
+
+# Fill starting values of boxes (box1, box2, box3)
+# Here boxes are 1 cm x 1 cm x h cm layers
+inital_carbon <- c(0.10, 0.03, 0.01)
+inital_height <- c(5, 5, 10)
+
+# Define carbon decomposition rate constant (k) /yr
+k = 0.05 # Ballpark temporary value
+
+# Define carbon inputs (0.04 g/cm2/yr)
+I = 0.04 # Ballpark for a temperate forest
+
+#================================ Box Construction ================================
+
+# Build a series of data frames. Each of these dfs will contain information
+# about one box property. Rows are timesteps, and columns are boxes.
+
+
+# Stores box height (cm) - AKA volume, since this is a unit profile
+height_df = data.frame(box1 = rep(NA, times = nsteps),
+                       box2 = NA,
+                       box3 = NA)
+
+# Stores box mass (g)
+mass_df = data.frame(box1 = rep(NA, times = nsteps),
+                   box2 = NA,
+                   box3 = NA)
+
+# Stores bulk density (BD) (g/cm3)
+bd_df = data.frame(box1 = rep(NA, times = nsteps),
+                   box2 = NA,
+                   box3 = NA)
+
+# Stores organic carbon (OC) proportion
+carbon_df = data.frame(box1 = rep(NA, times = nsteps),
+                   box2 = NA,
+                   box3 = NA)
+
+# Stores wheter a box is the top (1) or not (0).
+top_df = data.frame(box1 = rep(1, times = nsteps),
+                    box2 = 0,
+                    box3 = 0)
+
+
+#================================ Define Functions ================================
+
+# Function for calculating BD from porosity (m3/m3) based on SOM fraction (g/g)
+# Using Porosity = 0.1224 * log(SOM) + 0.9653 from Robinson et al. (2022)
+# And Particle Density (PD) = 2.7 g/cm3 * (1 - OM) + 1.4g/cm3 * (OM)
+# And BD = PD * (1 - Porosity)
+bd_fun <- function(soc){
+  som = soc * 2 # Compute SOM from SOC
+  P = 0.1224 * log(som) + 0.9653 # Compute porosity
+  PD = 2.7 * (1 - som) + 1.4 * som # Compute particle density
+  BD = PD * (1 - P) # Compute BD
+  
+  return(BD)
+}
+
+# Function for calculating soc from last soc, k, and bd (g/cm3) 
+# Using 1 / k * (1 - exp(-k * soc)) 
+carbon_fun <- function(soc_in, bd, input){
+  soc_gcm <- soc_in * bd # Convert SOC to units of g/cm3
+  new_soc = 1 / k * (I - I * exp(-k * 1)) # Compute soc following decomposition
+  #' [^ WIP here, this equation is junk, maybe somehow integrate carbon steady state science in here. e.g. assume we are at carbon steady state at t0, but then something changes]
+  soc_out = (new_soc + input) / bd # Add inputs and convert back
+  return(soc_out)
+}
+
+
+#================================ Load Initial State ================================
+
+carbon_df[1,] <- inital_carbon
+height_df[1,] <- inital_height
+
+# Compute BD based on initial carbon condition
+initial_bd <- lapply(inital_carbon, bd_fun)
+  bd_df[1,] <- initial_bd
+
+# Compute mass based on initial BD
+mass_df[1,] <- inital_height * unlist(initial_bd)
+
+#================================ Model Loop ================================
+
+t = 1
+for (t in seq_len(nsteps)) {
+  
+  # Box 1
+    # Carbon
+    carbon_df$box1[t + 1] = carbon_fun(carbon_df$box1[t],
+                                     bd_df$box1[t],
+                                     I)
+    # Bulk Density
+    bd_df$box1[t + 1] = bd_fun(carbon_df$box1[t + 1])
+    
+    # Mass
+    mass_df$box1[t + 1] = mass_df$box1[t] + I
+    
+    # Height
+    height_df$box1[t + 1] = mass_df$box1[t + 1] / bd_df$box1[t + 1]
+}
+    
+
+
+
+
+
+
+
 
 # Initial box properties (box 1 = top, box 3 = bottom)
 box_heights   <- c(0.3, 0.4, 0.3)   # initial height of each box  [length units]
@@ -33,7 +150,9 @@ input_density <- 0.8    # density of the added material
 n_steps <- 50           # number of time steps to simulate
 dt      <- 1            # length of each time step (for labelling; model is discrete)
 
-# ── DERIVED INITIAL STATE ────────────────────────────────────────────────────
+
+
+#================================ Variables ================================
 
 n_boxes    <- length(box_heights)
 box_masses <- box_densities * box_heights   # mass = density × height (vol = height)
