@@ -30,3 +30,5 @@ usethis::create_github_token()
 # Past code in console prompt
 gitcreds::gitcreds_set()
 
+# Create a target file
+targets::use_targets()
