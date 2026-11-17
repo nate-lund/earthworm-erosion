@@ -8,7 +8,7 @@ output: html_document
 knitr::opts_chunk$set(eval = FALSE, echo = TRUE, width = 300, warning = FALSE, out.width = "45%", fig.show = 'hold', fig.align = "center")
 
 # libraries needed
-libs <- c("tinytex", "ggplot2", "dplyr", "tidyr", "rlang", "usethis", "bookdown", "knitr", "rmarkdown", "spelling", "lidR", "shapefiles", "sf", "terra", "raster", "ggplot2", "easypackages", "spatialEco", "rasterVis")
+libs <- c("tinytex", "ggplot2", "dplyr", "tidyr", "rlang", "usethis", "knitr", "rmarkdown", "spelling", "lidR", "shapefiles", "sf", "terra", "raster", "ggplot2", "easypackages", "spatialEco", "rasterVis")
 
 # install missing libraries
 installed_libs <- libs %in% rownames(installed.packages())
@@ -52,14 +52,14 @@ $$\Delta P = 1 -\frac{\Delta \rho}{\rho_{s}} $$ Where ∆SOM in the required cha
 # Set parameters
 dz = -0.5 # cm
 Dp = 5 # cm
-rho_i = 0.91 # g/cm^3
+rho_i = 0.65 # g/cm^3
 rho_s = 2.61 # g/cm^3
 
 # Compute initial and final bulk density (g/cm^3)
-rho_f * Dp / (Dp + dz) - rho_i
+rho_f = rho_i * (Dp / (Dp + dz))
 
 # Compute initial and final porosity (unit less proportion)
-P_i = 1 - rho_i / rho_s
+  = 1 - rho_i / rho_s
 P_f =  1 - rho_f / rho_s # rho_s would technically change, but the final SOM is relativley insensitive
 
 # Compute change in SOM fraction (cm^3/cm^3)
@@ -100,3 +100,31 @@ paste0("Delta r = ", signif(dr_km, 3), " km/m2")
 paste0("Delta r = ", signif(dr_g, 3), " g/m2")
 
 ```
+
+
+## Volumetric strain & Erosion figure
+
+```{r}
+dfigure = data.frame(time = seq(1, 100, by = 1)) %>% 
+  mutate(
+    # Volumetric change
+    net_volume = 0,
+    gross_volume = 8*sin(time),
+    
+    # Erosion
+    net_erosion = -0.5 * time,
+    gross_erosion = net_erosion + gross_volume
+    
+  )
+
+tibble(dfigure)
+
+ggplot(data = dfigure) +
+  geom_line(mapping = aes(x = time, y = net_volume)) +
+  geom_line(mapping = aes(x = time, y = gross_volume)) +
+  geom_line(mapping = aes(x = time, y = net_erosion)) +
+  geom_line(mapping = aes(x = time, y = gross_erosion))
+
+```
+
+
