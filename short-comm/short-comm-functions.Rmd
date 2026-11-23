@@ -186,10 +186,22 @@ for(j in sets){
     scale_x_continuous(name = "measurement period") +
     ggtitle(j)
   
+  plotj2 = ggplot(data = dj) +
+    geom_point(mapping = aes(x = log(dx), y = log(abs(dzdx)))) +
+    
+    geom_hline(yintercept = log(0.25)) +
+    geom_abline(slope = -1, intercept = log(0.25), linetype = 2) +
+    geom_abline(slope = -0.5, intercept = log(0.25), linetype = 3) +
+    
+    scale_y_continuous(name = "log rate of elevation change") +
+    scale_x_continuous(name = "log measurement period") +
+    ggtitle(j)
+  
   # Make global variables
   assign(paste0(j, "_data"), dj)
   assign(paste0(j, "_plot"), plotj)
-
+  assign(paste0(j, "_plot2"), plotj2)
+  
   }
 
 # gross_volume_data
@@ -201,42 +213,12 @@ for(j in sets){
 
 
 # Plot all
-signed_rates = plot_grid(total_plot, gross_volume_plot, gross_erosion_plot, cols = 1)
-plot_grid(plota, signed_rates, cols = 2)
+signed_rates = plot_grid(total_plot, gross_volume_plot, gross_erosion_plot, cols = 2)
+signed_rates2 = plot_grid(total_plot2, gross_volume_plot2, gross_erosion_plot2, cols = 2)
+plota
 
 
 
-
-ggplot(data = gross_volume_data) +
-  geom_point(mapping = aes(x = log(dx), y = log(abs(dzdx)))) +
-  
-  geom_hline(yintercept = log(0.25)) +
-  geom_abline(slope = -1, intercept = log(0.25), linetype = 2) +
-  geom_abline(slope = -0.5, intercept = log(0.25), linetype = 3) +
-
-  scale_y_continuous(name = "log rate of elevation change") +
-  scale_x_continuous(name = "log measurement period")
-
-ggplot(data = gross_erosion_data) +
-  geom_point(mapping = aes(x = log(dx), y = log(abs(dzdx)))) +
-  
-  geom_hline(yintercept = log(0.25)) +
-  geom_abline(slope = -1, intercept = log(0.25), linetype = 2) +
-  geom_abline(slope = -0.5, intercept = log(0.25), linetype = 3) +
-
-  scale_y_continuous(name = "log rate of elevation change") +
-  scale_x_continuous(name = "log measurement period")
-
-
-ggplot(data = total_data) +
-  geom_point(mapping = aes(x = log(dx), y = log(abs(dzdx)))) +
-  
-  geom_hline(yintercept = log(0.25)) +
-  geom_abline(slope = -1, intercept = log(0.25), linetype = 2) +
-  geom_abline(slope = -0.5, intercept = log(0.25), linetype = 3) +
-
-  scale_y_continuous(name = "log rate of elevation change") +
-  scale_x_continuous(name = "log measurement period")
 
 ```
 
